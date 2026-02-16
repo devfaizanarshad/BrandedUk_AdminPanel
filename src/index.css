@@ -1,0 +1,95 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --sidebar-bg: #ffffff;
+  --sidebar-border: #e2e8f0;
+  --primary-purple: #7c3aed;
+  --text-primary: #1e293b;
+  --text-secondary: #64748b;
+  --text-muted: #94a3b8;
+  --bg-app: #f8fafc;
+}
+
+* {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  letter-spacing: -0.01em;
+}
+
+body {
+  margin: 0;
+  background-color: #f4f7fa;
+  color: #1a202c;
+}
+
+/* Custom Scrollbar - Cleaner */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Thin Scrollbar Utility */
+.thin-scrollbar::-webkit-scrollbar {
+  width: 3px;
+}
+
+.thin-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.thin-scrollbar::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 10px;
+}
+
+.thin-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
+
+/* Global Transitions */
+.transition-standard {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Custom Utilities */
+.bg-enterprise-purple {
+  background-color: var(--primary-purple);
+}
+
+.text-enterprise-purple {
+  color: var(--primary-purple);
+}
+
+.bg-primary {
+  background-color: var(--primary-purple) !important;
+}
+
+.text-primary {
+  color: var(--primary-purple) !important;
+}
+
+.border-primary {
+  border-color: var(--primary-purple) !important;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--primary-purple);
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.08);
+}
