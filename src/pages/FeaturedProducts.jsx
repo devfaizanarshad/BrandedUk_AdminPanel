@@ -10,7 +10,7 @@ const API_BASE = 'https://api.brandeduk.com'
 const FeaturedProducts = () => {
     const [products, setProducts] = useState([])
     const [loading, setLoading] = useState(true)
-    const [filterType, setFilterType] = useState('all') // 'all' | 'best' | 'recommended'
+    const [filterType, setFilterType] = useState('best') // 'best' | 'recommended'
     const [searchTerm, setSearchTerm] = useState('')
     const [productTypes, setProductTypes] = useState([])
     const [selectedType, setSelectedType] = useState(null)
@@ -28,17 +28,20 @@ const FeaturedProducts = () => {
     const selectedProducts = selectionsByType[filterType] || new Map()
     const validationErrors = validationErrorsByType[filterType] || new Map()
 
-    const updateCurrentSelections = (updater) => {
+    const updateCurrentSelections = (updater) => updateSelectionsByType(filterType, updater)
+    const updateCurrentValidationErrors = (updater) => updateValidationErrorsByType(filterType, updater)
+
+    const updateSelectionsByType = (type, updater) => {
         setSelectionsByType(prev => ({
             ...prev,
-            [filterType]: typeof updater === 'function' ? updater(prev[filterType]) : updater
+            [type]: typeof updater === 'function' ? updater(prev[type]) : updater
         }))
     }
 
-    const updateCurrentValidationErrors = (updater) => {
+    const updateValidationErrorsByType = (type, updater) => {
         setValidationErrorsByType(prev => ({
             ...prev,
-            [filterType]: typeof updater === 'function' ? updater(prev[filterType]) : updater
+            [type]: typeof updater === 'function' ? updater(prev[type]) : updater
         }))
     }
 
@@ -52,8 +55,10 @@ const FeaturedProducts = () => {
             return Array.from(selections.entries()).some(([code, data]) => {
                 const product = products.find(p => p.style_code === code)
                 const currentOrder = type === 'best' ? product?.best_seller_order : product?.recommended_order
-                const normalizedCurrent = currentOrder === 999999 ? null : currentOrder
-                return data.order !== normalizedCurrent
+
+                // If it's in selections, we check if the new order differs from original
+                // 999999 = Unfeatured, < 999999 = Featured
+                return data.order !== currentOrder
             })
         })
     }, [selectionsByType, products])
@@ -68,9 +73,7 @@ const FeaturedProducts = () => {
         try {
             setLoading(true)
             const params = new URLSearchParams()
-            if (filterType !== 'all') {
-                params.append('type', filterType)
-            }
+            params.append('type', filterType)
             if (selectedType) {
                 params.append('product_type_id', selectedType.id)
             }
@@ -98,7 +101,7 @@ const FeaturedProducts = () => {
 
     // Fetch ALL pinned products for this category to detect conflicts
     const fetchAllPinned = useCallback(async () => {
-        if (!selectedType || filterType === 'all') {
+        if (!selectedType) {
             setPinnedPositions(new Map())
             return
         }
@@ -134,29 +137,42 @@ const FeaturedProducts = () => {
         fetchAllPinned()
     }, [fetchFeatured, fetchAllPinned])
 
-    const toggleFeatured = async (product, isBestSeller, isRecommended) => {
-        try {
-            setProcessing(true)
-            const response = await fetch(`${API_BASE}/api/admin/products/bulk-featured`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    style_codes: [product.style_code],
-                    is_best_seller: isBestSeller,
-                    is_recommended: isRecommended
-                })
-            })
+    const handleToggleFeatured = (product, type) => {
+        const code = product.style_code
+        updateSelectionsByType(type, prev => {
+            const next = new Map(prev)
+            const currentSelection = next.get(code)
 
-            if (!response.ok) throw new Error('Failed to update product')
-            setSuccessMessage('Product updated')
-            setTimeout(() => setSuccessMessage(null), 2000)
-            await fetchFeatured()
-            await fetchAllPinned()
-        } catch (err) {
-            setError(err.message)
-        } finally {
-            setProcessing(false)
-        }
+            const originalOrder = type === 'best' ? product.best_seller_order : product.recommended_order
+            const isOriginallyFeatured = originalOrder !== 999999 && originalOrder != null
+
+            let isCurrentlyFeatured = currentSelection
+                ? currentSelection.order !== 999999
+                : isOriginallyFeatured
+
+            let nextOrder
+            if (isCurrentlyFeatured) {
+                nextOrder = 999999
+            } else {
+                // If originally had a position, restore it, otherwise give it next available or unpinned
+                if (isOriginallyFeatured && originalOrder < 999999) {
+                    nextOrder = originalOrder
+                } else {
+                    // Try to find max position across pinned and selections for this type
+                    const pinnedOrders = Array.from(pinnedPositions.keys()).filter(o => o < 999999)
+                    const selectionOrders = Array.from(next.values()).map(s => s.order).filter(o => o != null && o < 999999)
+                    const allOrders = [...pinnedOrders, ...selectionOrders]
+                    const maxPos = allOrders.length > 0 ? Math.max(...allOrders) : 0
+                    nextOrder = maxPos + 1
+                }
+            }
+
+            next.set(code, {
+                order: nextOrder,
+                name: product.style_name || product.name
+            })
+            return next
+        })
     }
 
     const filteredList = products.filter(p =>
@@ -464,7 +480,7 @@ const FeaturedProducts = () => {
                 </div>
 
                 <div className="flex items-center gap-3">
-                    {filterType !== 'all' && selectedType && (
+                    {selectedType && (
                         <button
                             onClick={rebalanceSequence}
                             className="px-4 py-2.5 bg-white border border-slate-200 text-slate-700 text-xs font-bold uppercase tracking-widest rounded-xl hover:bg-slate-50 transition-all flex items-center gap-2"
@@ -549,13 +565,12 @@ const FeaturedProducts = () => {
                             {selectedProducts.size > 0 && (
                                 <div className="flex items-center gap-3 pr-4 border-r border-slate-200">
                                     <span className="text-[11px] font-black text-slate-900 uppercase">{selectedProducts.size} Selected</span>
-                                    <button onClick={() => { setSelectedProducts(new Map()); setValidationErrors(new Map()); }} className="text-[10px] font-bold text-slate-400 hover:text-red-500 uppercase">Clear</button>
+                                    <button onClick={() => { updateCurrentSelections(new Map()); updateCurrentValidationErrors(new Map()); }} className="text-[10px] font-bold text-slate-400 hover:text-red-500 uppercase">Clear</button>
                                 </div>
                             )}
 
                             <div className="flex bg-slate-100 p-1 rounded-xl">
                                 {[
-                                    { id: 'all', label: 'All', icon: Layers },
                                     { id: 'best', label: 'Best Sellers', icon: Star },
                                     { id: 'recommended', label: 'Recommended', icon: Sparkles }
                                 ].map(type => (
@@ -589,7 +604,7 @@ const FeaturedProducts = () => {
                                                 checked={filteredList.length > 0 && selectedProducts.size === filteredList.length}
                                             />
                                         </th>
-                                        {filterType !== 'all' && <th className="py-4 px-6 text-[10px] font-black text-slate-400 uppercase tracking-widest w-36 text-center">Order</th>}
+                                        <th className="py-4 px-6 text-[10px] font-black text-slate-400 uppercase tracking-widest w-36 text-center">Order</th>
                                         <th className="py-4 px-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Product</th>
                                         <th className="py-4 px-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Brand</th>
                                         <th className="py-4 px-6 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center min-w-[320px]">Status</th>
@@ -630,6 +645,16 @@ const FeaturedProducts = () => {
                                             const validationError = validationErrors.get(code)
                                             const isOccupied = isPositionOccupied(code, displayOrder)
 
+                                            // Effective statuses for the buttons
+                                            const getStatus = (type) => {
+                                                const sel = selectionsByType[type].get(code)
+                                                if (sel) return sel.order !== 999999
+                                                const order = type === 'best' ? product.best_seller_order : product.recommended_order
+                                                return order !== 999999 && order != null
+                                            }
+                                            const isBestSeller = getStatus('best')
+                                            const isRecommended = getStatus('recommended')
+
                                             return (
                                                 <tr
                                                     key={code}
@@ -644,74 +669,72 @@ const FeaturedProducts = () => {
                                                         />
                                                     </td>
 
-                                                    {filterType !== 'all' && (
-                                                        <td className="py-4 px-6">
-                                                            <div className="flex items-center justify-center gap-1.5 min-w-[120px]">
-                                                                {/* Up/Down Controls */}
-                                                                {(isSelected || isPinned) && (
-                                                                    <div className="flex flex-col gap-0.5">
-                                                                        <button
-                                                                            onClick={() => moveUp(product)}
-                                                                            disabled={displayOrder <= 1}
-                                                                            className="p-1 rounded-md text-slate-300 hover:text-primary hover:bg-primary/10 disabled:opacity-0 transition-all font-black"
-                                                                        >
-                                                                            <ChevronUp className="w-3.5 h-3.5 stroke-[3]" />
-                                                                        </button>
-                                                                        <button
-                                                                            onClick={() => moveDown(product)}
-                                                                            className="p-1 rounded-md text-slate-300 hover:text-primary hover:bg-primary/10 transition-all font-black"
-                                                                        >
-                                                                            <ChevronDown className="w-3.5 h-3.5 stroke-[3]" />
-                                                                        </button>
-                                                                    </div>
-                                                                )}
-
-                                                                <div className="relative group/badge flex items-center gap-1.5">
-                                                                    {isSelected ? (
-                                                                        <div className={`relative px-2 py-1.5 rounded-[8px] text-[12px] font-bold flex items-center gap-1 min-w-[60px] justify-center transition-all ${validationError ? 'bg-red-500 text-white shadow-lg shadow-red-200' : isPinned ? 'bg-amber-400 text-white shadow-lg shadow-amber-200/50' : 'bg-slate-100 text-slate-400 border border-slate-200'}`}>
-                                                                            <input
-                                                                                type="number"
-                                                                                min="1"
-                                                                                value={displayOrder ?? ''}
-                                                                                onChange={(e) => handleOrderChange(product, e.target.value)}
-                                                                                onBlur={() => triggerConflictModal(product)}
-                                                                                className="w-8 bg-transparent text-center focus:outline-none border-none p-0 text-[12px] font-bold placeholder:text-current/30"
-                                                                                placeholder="-"
-                                                                            />
-
-                                                                            {/* Conflict Warning Icon */}
-                                                                            {!validationError && isOccupied && (
-                                                                                <AlertTriangle className="w-3 h-3 text-white absolute -top-1 -left-1 bg-amber-600 rounded-full p-0.5 shadow-sm" />
-                                                                            )}
-
-                                                                            {/* Validation Error Tooltip */}
-                                                                            {validationError && (
-                                                                                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-slate-900 text-white text-[9px] font-black rounded uppercase tracking-widest whitespace-nowrap z-10">
-                                                                                    {validationError}
-                                                                                    <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-900" />
-                                                                                </div>
-                                                                            )}
-
-                                                                            {isPinned && (
-                                                                                <button
-                                                                                    onClick={(e) => { e.stopPropagation(); handleOrderChange(product, ''); }}
-                                                                                    className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-slate-800 text-white flex items-center justify-center opacity-0 group-hover/badge:opacity-100 transition-all hover:bg-red-500 scale-75 group-hover/badge:scale-100"
-                                                                                >
-                                                                                    <X className="w-2.5 h-2.5 stroke-[3]" />
-                                                                                </button>
-                                                                            )}
-                                                                        </div>
-                                                                    ) : isPinned ? (
-                                                                        <div className="bg-slate-100 text-slate-600 px-3 py-1.5 rounded-[8px] text-[12px] font-bold flex items-center gap-1 min-w-[50px] justify-center border border-slate-200">
-                                                                            <span>{displayOrder}</span>
-                                                                        </div>
-                                                                    ) : (
-                                                                        <span className="text-slate-200 text-xs font-black tracking-widest">—</span>
-                                                                    )}
+                                                    <td className="py-4 px-6">
+                                                        <div className="flex items-center justify-center gap-1.5 min-w-[120px]">
+                                                            {/* Up/Down Controls */}
+                                                            {(isSelected || isPinned) && (
+                                                                <div className="flex flex-col gap-0.5">
+                                                                    <button
+                                                                        onClick={() => moveUp(product)}
+                                                                        disabled={displayOrder <= 1}
+                                                                        className="p-1 rounded-md text-slate-300 hover:text-primary hover:bg-primary/10 disabled:opacity-0 transition-all font-black"
+                                                                    >
+                                                                        <ChevronUp className="w-3.5 h-3.5 stroke-[3]" />
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() => moveDown(product)}
+                                                                        className="p-1 rounded-md text-slate-300 hover:text-primary hover:bg-primary/10 transition-all font-black"
+                                                                    >
+                                                                        <ChevronDown className="w-3.5 h-3.5 stroke-[3]" />
+                                                                    </button>
                                                                 </div>
+                                                            )}
+
+                                                            <div className="relative group/badge flex items-center gap-1.5">
+                                                                {isSelected ? (
+                                                                    <div className={`relative px-2 py-1.5 rounded-[8px] text-[12px] font-bold flex items-center gap-1 min-w-[60px] justify-center transition-all ${validationError ? 'bg-red-500 text-white shadow-lg shadow-red-200' : isPinned ? 'bg-amber-400 text-white shadow-lg shadow-amber-200/50' : 'bg-slate-100 text-slate-400 border border-slate-200'}`}>
+                                                                        <input
+                                                                            type="number"
+                                                                            min="1"
+                                                                            value={displayOrder ?? ''}
+                                                                            onChange={(e) => handleOrderChange(product, e.target.value)}
+                                                                            onBlur={() => triggerConflictModal(product)}
+                                                                            className="w-8 bg-transparent text-center focus:outline-none border-none p-0 text-[12px] font-bold placeholder:text-current/30"
+                                                                            placeholder="-"
+                                                                        />
+
+                                                                        {/* Conflict Warning Icon */}
+                                                                        {!validationError && isOccupied && (
+                                                                            <AlertTriangle className="w-3 h-3 text-white absolute -top-1 -left-1 bg-amber-600 rounded-full p-0.5 shadow-sm" />
+                                                                        )}
+
+                                                                        {/* Validation Error Tooltip */}
+                                                                        {validationError && (
+                                                                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-slate-900 text-white text-[9px] font-black rounded uppercase tracking-widest whitespace-nowrap z-10">
+                                                                                {validationError}
+                                                                                <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-900" />
+                                                                            </div>
+                                                                        )}
+
+                                                                        {isPinned && (
+                                                                            <button
+                                                                                onClick={(e) => { e.stopPropagation(); handleOrderChange(product, ''); }}
+                                                                                className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-slate-800 text-white flex items-center justify-center opacity-0 group-hover/badge:opacity-100 transition-all hover:bg-red-500 scale-75 group-hover/badge:scale-100"
+                                                                            >
+                                                                                <X className="w-2.5 h-2.5 stroke-[3]" />
+                                                                            </button>
+                                                                        )}
+                                                                    </div>
+                                                                ) : isPinned ? (
+                                                                    <div className="bg-slate-100 text-slate-600 px-3 py-1.5 rounded-[8px] text-[12px] font-bold flex items-center gap-1 min-w-[50px] justify-center border border-slate-200">
+                                                                        <span>{displayOrder}</span>
+                                                                    </div>
+                                                                ) : (
+                                                                    <span className="text-slate-200 text-xs font-black tracking-widest">—</span>
+                                                                )}
                                                             </div>
-                                                        </td>
-                                                    )}
+                                                        </div>
+                                                    </td>
 
                                                     <td className="py-4 px-6">
                                                         <div className="flex items-center gap-4">
@@ -737,23 +760,23 @@ const FeaturedProducts = () => {
                                                     <td className="py-4 px-6">
                                                         <div className="flex items-center justify-center gap-3">
                                                             <button
-                                                                onClick={() => toggleFeatured(product, !product.is_best_seller, product.is_recommended)}
-                                                                className={`h-8 px-4 rounded-lg text-[10px] font-black uppercase tracking-widest border transition-all flex items-center gap-2 whitespace-nowrap ${product.is_best_seller
+                                                                onClick={() => handleToggleFeatured(product, 'best')}
+                                                                className={`h-8 px-4 rounded-lg text-[10px] font-black uppercase tracking-widest border transition-all flex items-center gap-2 whitespace-nowrap ${isBestSeller
                                                                     ? 'bg-amber-400 border-amber-400 text-white shadow-lg shadow-amber-200/50'
                                                                     : 'bg-white border-slate-200 text-slate-400 hover:border-amber-400 hover:text-amber-500'
                                                                     }`}
                                                             >
-                                                                <Star className={`w-3.5 h-3.5 ${product.is_best_seller ? 'fill-current' : ''}`} />
+                                                                <Star className={`w-3.5 h-3.5 ${isBestSeller ? 'fill-current' : ''}`} />
                                                                 Best Seller
                                                             </button>
                                                             <button
-                                                                onClick={() => toggleFeatured(product, product.is_best_seller, !product.is_recommended)}
-                                                                className={`h-8 px-4 rounded-lg text-[10px] font-black uppercase tracking-widest border transition-all flex items-center gap-2 whitespace-nowrap ${product.is_recommended
+                                                                onClick={() => handleToggleFeatured(product, 'recommended')}
+                                                                className={`h-8 px-4 rounded-lg text-[10px] font-black uppercase tracking-widest border transition-all flex items-center gap-2 whitespace-nowrap ${isRecommended
                                                                     ? 'bg-primary border-primary text-white shadow-lg shadow-primary/20'
                                                                     : 'bg-white border-slate-200 text-slate-400 hover:border-primary hover:text-primary'
                                                                     }`}
                                                             >
-                                                                <Sparkles className={`w-3.5 h-3.5 ${product.is_recommended ? 'fill-current' : ''}`} />
+                                                                <Sparkles className={`w-3.5 h-3.5 ${isRecommended ? 'fill-current' : ''}`} />
                                                                 Recommended
                                                             </button>
                                                         </div>
