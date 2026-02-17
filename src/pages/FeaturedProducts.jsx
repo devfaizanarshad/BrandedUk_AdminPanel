@@ -200,7 +200,7 @@ const FeaturedProducts = () => {
     }
 
     const checkConflict = (code, newPosition) => {
-        if (newPosition == null) return null
+        if (newPosition == null || Number(newPosition) === 999999) return null
 
         // Conflict within selection
         for (const [productCode, data] of selectedProducts.entries()) {
@@ -378,18 +378,20 @@ const FeaturedProducts = () => {
             const positions = new Map()
 
             selections.forEach((data, code) => {
-                if (data.order === null || data.order === 999999) return
-                if (!Number.isInteger(data.order) || data.order < 1) {
+                const order = data.order != null ? Number(data.order) : null
+                if (order === null || order === 999999) return
+
+                if (!Number.isInteger(order) || order < 1) {
                     errorsByType[type].set(code, 'Invalid position')
                     hasErrors = true
                     return
                 }
-                if (positions.has(data.order)) {
-                    errorsByType[type].set(code, `Duplicate #${data.order}`)
-                    errorsByType[type].set(positions.get(data.order), `Duplicate #${data.order}`)
+                if (positions.has(order)) {
+                    errorsByType[type].set(code, `Duplicate #${order}`)
+                    errorsByType[type].set(positions.get(order), `Duplicate #${order}`)
                     hasErrors = true
                 } else {
-                    positions.set(data.order, code)
+                    positions.set(order, code)
                 }
             })
         })
