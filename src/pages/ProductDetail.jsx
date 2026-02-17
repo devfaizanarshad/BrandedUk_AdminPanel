@@ -28,6 +28,7 @@ const ProductDetail = () => {
     // Pricing calculator state
     const [pricingMode, setPricingMode] = useState(false)
     const [editCartonPrice, setEditCartonPrice] = useState('')
+    const [editMarkupTier, setEditMarkupTier] = useState('')
     const [priceBreaksEditData, setPriceBreaksEditData] = useState([])
     const [savingPrice, setSavingPrice] = useState(false)
     const [savingOverrides, setSavingOverrides] = useState(false)
@@ -83,8 +84,9 @@ const ProductDetail = () => {
                 primary_image_url: (data.image && data.image !== 'Not available') ? data.image : (data.images?.find(img => img.type === 'main')?.url || '')
             })
 
-            // Initialize carton price
+            // Initialize carton price and markup tier
             setEditCartonPrice((data.carton_price || data.cartonPrice || 0).toString())
+            setEditMarkupTier((data.markup_tier || data.markupPercent || 0).toString())
 
             // Fetch specific price overrides data
             await fetchPriceOverridesData()
@@ -120,7 +122,7 @@ const ProductDetail = () => {
         if (!product) return null
 
         const cartonPrice = parseFloat(editCartonPrice) || 0
-        const markupPercent = product.markup_tier || product.markupPercent || 0
+        const markupPercent = parseFloat(editMarkupTier) || 0
 
         // Calculate new sell price based on carton price and markup
         const newSellPrice = cartonPrice * (1 + markupPercent / 100)
@@ -149,9 +151,10 @@ const ProductDetail = () => {
             priceBreaks: newPriceBreaks,
             priceDifference,
             percentChange,
-            hasChanges: Math.abs(cartonPrice - (product.carton_price || product.cartonPrice || 0)) > 0.001
+            hasChanges: Math.abs(cartonPrice - (product.carton_price || product.cartonPrice || 0)) > 0.001 ||
+                Math.abs(markupPercent - (product.markup_tier || product.markupPercent || 0)) > 0.001
         }
-    }, [product, editCartonPrice])
+    }, [product, editCartonPrice, editMarkupTier])
 
     const handleDiscontinue = async () => {
         if (!confirm('Are you sure you want to discontinue this product?')) return
@@ -238,7 +241,8 @@ const ProductDetail = () => {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    carton_price: parseFloat(editCartonPrice)
+                    carton_price: parseFloat(editCartonPrice),
+                    markup_tier: parseFloat(editMarkupTier)
                 })
             })
 
@@ -372,6 +376,7 @@ const ProductDetail = () => {
 
     const handleCancelPricing = () => {
         setEditCartonPrice((product.carton_price || product.cartonPrice || 0).toString())
+        setEditMarkupTier((product.markup_tier || product.markupPercent || 0).toString())
         setPriceBreaksEditData(product.priceBreaks?.map(pb => ({
             min_qty: pb.min,
             max_qty: pb.max,
@@ -906,12 +911,28 @@ const ProductDetail = () => {
                                 </div>
 
                                 {/* Markup */}
-                                <div className="p-6 bg-white rounded-2xl border-2 border-gray-100">
-                                    <label className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2 block">Markup</label>
-                                    <div className="text-3xl font-bold text-gray-900">
-                                        {product.markup_tier || product.markupPercent || 0}%
-                                    </div>
-                                    <p className="text-xs text-gray-400 mt-1">Based on pricing tier</p>
+                                <div className={`p-6 rounded-2xl transition-all ${pricingMode ? 'bg-primary/5 border-2 border-primary/20' : 'bg-white border-2 border-gray-100'}`}>
+                                    <label className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2 block">Markup %</label>
+                                    {pricingMode ? (
+                                        <div className="relative">
+                                            <input
+                                                type="number"
+                                                step="0.1"
+                                                min="0"
+                                                value={editMarkupTier}
+                                                onChange={(e) => setEditMarkupTier(e.target.value)}
+                                                className="w-full pr-8 py-3 text-2xl font-bold text-gray-900 border-2 border-primary rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50"
+                                            />
+                                            <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xl font-bold text-gray-400">%</span>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            <div className="text-3xl font-bold text-gray-900">
+                                                {product.markup_tier || product.markupPercent || 0}%
+                                            </div>
+                                            <p className="text-xs text-gray-400 mt-1">Based on pricing tier</p>
+                                        </>
+                                    )}
                                 </div>
 
                                 {/* Calculated Sell Price */}

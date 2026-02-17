@@ -46,7 +46,7 @@ const Products = () => {
     const [error, setError] = useState(null)
     const [successMessage, setSuccessMessage] = useState(null)
     const [validationErrors, setValidationErrors] = useState(new Map()) // code -> error message
-    const [viewType, setViewType] = useState('standard') // 'standard' | 'discontinued'
+    const [viewType, setViewType] = useState('standard') // 'standard' | 'deactivated'
 
     // Markup Modal State
     const [markupModal, setMarkupModal] = useState(false)
@@ -57,7 +57,7 @@ const Products = () => {
 
     const dropdownRef = useRef(null)
 
-    const bulkActions = viewType === 'discontinued' ? [
+    const bulkActions = viewType === 'deactivated' ? [
         { label: 'Activate Products', value: 'bulk-activate', icon: Power },
         { label: 'Export to CSV', value: 'export', icon: Download },
     ] : [
@@ -66,7 +66,6 @@ const Products = () => {
         { label: 'Set as Best Seller', value: 'bulk-set-best-seller', icon: Star },
         { label: 'Set as Recommended', value: 'bulk-set-recommended', icon: SparklesIcon },
         { label: 'Set Markup Tier', value: 'bulk-markup', icon: Percent },
-        { label: 'Discontinue Products', value: 'bulk-discontinue', icon: PowerOff },
         { label: 'Set Deactivated', value: 'deactivate', icon: PowerOff },
         { label: 'Export to CSV', value: 'export', icon: Download },
         { label: 'Remove Promotion Tags', value: 'bulk-remove-featured', icon: X, danger: true },
@@ -278,7 +277,7 @@ const Products = () => {
             params.append('limit', itemsPerPage.toString())
             params.append('_t', Date.now().toString())
 
-            const endpoint = viewType === 'discontinued' ? '/api/products/discontinued' : '/api/products'
+            const endpoint = viewType === 'deactivated' ? '/api/products/discontinued' : '/api/products'
             const response = await fetch(`${API_BASE}${endpoint}?${params}`, {
                 cache: 'no-store',
                 headers: { 'Cache-Control': 'no-cache' }
@@ -1064,13 +1063,13 @@ const Products = () => {
                             Live Catalog
                         </button>
                         <button
-                            onClick={() => setViewType('discontinued')}
-                            className={`px-6 py-2 text-[13px] font-bold rounded-md transition-all duration-200 ${viewType === 'discontinued'
+                            onClick={() => setViewType('deactivated')}
+                            className={`px-6 py-2 text-[13px] font-bold rounded-md transition-all duration-200 ${viewType === 'deactivated'
                                 ? 'bg-white text-primary shadow-sm'
                                 : 'text-slate-400 hover:text-slate-600'
                                 }`}
                         >
-                            Discontinued
+                            Deactivated
                         </button>
                     </div>
 
