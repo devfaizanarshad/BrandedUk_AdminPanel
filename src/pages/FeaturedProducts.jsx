@@ -16,13 +16,31 @@ const FeaturedProducts = () => {
     const [selectedType, setSelectedType] = useState(null)
 
     // Selection & Ordering State
-    const [selectedProducts, setSelectedProducts] = useState(new Map())
+    const [selectionsByType, setSelectionsByType] = useState({ best: new Map(), recommended: new Map() })
     const [pinnedPositions, setPinnedPositions] = useState(new Map())
     const [processing, setProcessing] = useState(false)
     const [successMessage, setSuccessMessage] = useState(null)
     const [error, setError] = useState(null)
-    const [validationErrors, setValidationErrors] = useState(new Map())
+    const [validationErrorsByType, setValidationErrorsByType] = useState({ best: new Map(), recommended: new Map() })
     const [conflictModal, setConflictModal] = useState(null)
+
+    // Helpers to get current tab's state
+    const selectedProducts = selectionsByType[filterType] || new Map()
+    const validationErrors = validationErrorsByType[filterType] || new Map()
+
+    const updateCurrentSelections = (updater) => {
+        setSelectionsByType(prev => ({
+            ...prev,
+            [filterType]: typeof updater === 'function' ? updater(prev[filterType]) : updater
+        }))
+    }
+
+    const updateCurrentValidationErrors = (updater) => {
+        setValidationErrorsByType(prev => ({
+            ...prev,
+            [filterType]: typeof updater === 'function' ? updater(prev[filterType]) : updater
+        }))
+    }
 
     // Computed: has unsaved changes
     const hasUnsavedChanges = useMemo(() => {
@@ -136,18 +154,18 @@ const FeaturedProducts = () => {
     )
 
     const handleSelectRow = (product) => {
-        setSelectedProducts(prev => {
+        updateCurrentSelections(prev => {
             const next = new Map(prev)
             if (next.has(product.style_code)) {
                 next.delete(product.style_code)
-                setValidationErrors(v => {
+                updateCurrentValidationErrors(v => {
                     const updated = new Map(v)
                     updated.delete(product.style_code)
                     return updated
                 })
             } else {
                 let order = filterType === 'best' ? product.best_seller_order : product.recommended_order
-                if (order === 999999) order = null
+                if (order === 999999 || order == null) order = null
                 next.set(product.style_code, { order, name: product.style_name || product.name })
             }
             return next
@@ -181,7 +199,7 @@ const FeaturedProducts = () => {
         const order = value === '' ? null : parseInt(value, 10)
         if (order != null && isNaN(order)) return
 
-        setSelectedProducts(prev => {
+        updateCurrentSelections(prev => {
             const next = new Map(prev)
             const current = next.get(product.style_code) || { name: product.style_name || product.name }
             next.set(product.style_code, { ...current, order })
@@ -213,7 +231,7 @@ const FeaturedProducts = () => {
     const handleReplaceExisting = () => {
         if (!conflictModal) return
 
-        setSelectedProducts(prev => {
+        updateCurrentSelections(prev => {
             const next = new Map(prev)
 
             // Give position to new product
@@ -248,7 +266,7 @@ const FeaturedProducts = () => {
 
         const conflictCode = checkConflict(code, targetOrder)
 
-        setSelectedProducts(prev => {
+        updateCurrentSelections(prev => {
             const next = new Map(prev)
 
             if (conflictCode) {
@@ -270,14 +288,12 @@ const FeaturedProducts = () => {
         const data = selectedProducts.get(code) || { order: (filterType === 'best' ? product.best_seller_order : product.recommended_order) }
         let currentOrder = data.order
 
-        // If unpinned, we can't move down unless we give it a starting position. 
-        // But usually move buttons are for pinned items.
         if (currentOrder === 999999 || currentOrder == null) return
 
         const targetOrder = currentOrder + 1
         const conflictCode = checkConflict(code, targetOrder)
 
-        setSelectedProducts(prev => {
+        updateCurrentSelections(prev => {
             const next = new Map(prev)
 
             if (conflictCode) {
@@ -309,7 +325,7 @@ const FeaturedProducts = () => {
         const sorted = Array.from(allPinned.entries())
             .sort((a, b) => a[1] - b[1])
 
-        setSelectedProducts(prev => {
+        updateCurrentSelections(prev => {
             const next = new Map(prev)
             sorted.forEach(([code, _], index) => {
                 const newPos = index + 1
@@ -343,7 +359,7 @@ const FeaturedProducts = () => {
             }
         }
 
-        setValidationErrors(errors)
+        updateCurrentValidationErrors(errors)
         return errors.size === 0
     }
 
@@ -374,8 +390,8 @@ const FeaturedProducts = () => {
             if (!response.ok) throw new Error('Failed to save sequence')
 
             setSuccessMessage('Sequence saved successfully')
-            setSelectedProducts(new Map())
-            setValidationErrors(new Map())
+            updateCurrentSelections(new Map())
+            updateCurrentValidationErrors(new Map())
             await fetchFeatured()
             await fetchAllPinned()
             setTimeout(() => setSuccessMessage(null), 3000)
@@ -394,18 +410,14 @@ const FeaturedProducts = () => {
                 if (order === 999999 || order == null) order = null
                 items.set(p.style_code, { order, name: p.style_name || p.name })
             })
-            setSelectedProducts(items)
+            updateCurrentSelections(items)
         } else {
-            setSelectedProducts(new Map())
-            setValidationErrors(new Map())
+            updateCurrentSelections(new Map())
+            updateCurrentValidationErrors(new Map())
         }
     }
 
-    // Reset selection when switching categories to avoid position bleed
-    useEffect(() => {
-        setSelectedProducts(new Map())
-        setValidationErrors(new Map())
-    }, [filterType])
+    // REMOVED CLEARING EFFECT - Changes now persist when switching tabs
 
     return (
         <div className="space-y-8 animate-in fade-in duration-500 max-w-[1600px] mx-auto">
