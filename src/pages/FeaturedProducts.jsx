@@ -42,16 +42,27 @@ const FeaturedProducts = () => {
         }))
     }
 
-    // Computed: has unsaved changes
+    // Computed: has unsaved changes (Checking both categories)
     const hasUnsavedChanges = useMemo(() => {
-        if (selectedProducts.size === 0) return false
-        return Array.from(selectedProducts.entries()).some(([code, data]) => {
-            const product = products.find(p => p.style_code === code)
-            const currentOrder = filterType === 'best' ? product?.best_seller_order : product?.recommended_order
-            const normalizedCurrent = currentOrder === 999999 ? null : currentOrder
-            return data.order !== normalizedCurrent
+        const types = ['best', 'recommended']
+        return types.some(type => {
+            const selections = selectionsByType[type]
+            if (!selections || selections.size === 0) return false
+
+            return Array.from(selections.entries()).some(([code, data]) => {
+                const product = products.find(p => p.style_code === code)
+                const currentOrder = type === 'best' ? product?.best_seller_order : product?.recommended_order
+                const normalizedCurrent = currentOrder === 999999 ? null : currentOrder
+                return data.order !== normalizedCurrent
+            })
         })
-    }, [selectedProducts, products, filterType])
+    }, [selectionsByType, products])
+
+    const totalSelectedCount = useMemo(() => {
+        const bestSize = selectionsByType.best?.size || 0
+        const recommendedSize = selectionsByType.recommended?.size || 0
+        return bestSize + recommendedSize
+    }, [selectionsByType])
 
     const fetchFeatured = useCallback(async () => {
         try {
@@ -341,57 +352,78 @@ const FeaturedProducts = () => {
         setTimeout(() => setSuccessMessage(null), 3000)
     }
 
-    const validateOrders = () => {
-        const errors = new Map()
-        const positions = new Map()
+    const validateAllOrders = () => {
+        const errorsByType = { best: new Map(), recommended: new Map() }
+        let hasErrors = false
 
-        for (const [code, data] of selectedProducts.entries()) {
-            if (data.order === null) continue
-            if (!Number.isInteger(data.order) || data.order < 1) {
-                errors.set(code, 'Invalid position')
-                continue
-            }
-            if (positions.has(data.order)) {
-                errors.set(code, `Duplicate #${data.order}`)
-                errors.set(positions.get(data.order), `Duplicate #${data.order}`)
-            } else {
-                positions.set(data.order, code)
-            }
-        }
+        const types = ['best', 'recommended']
+        types.forEach(type => {
+            const selections = selectionsByType[type]
+            const positions = new Map()
 
-        updateCurrentValidationErrors(errors)
-        return errors.size === 0
+            selections.forEach((data, code) => {
+                if (data.order === null) return
+                if (!Number.isInteger(data.order) || data.order < 1) {
+                    errorsByType[type].set(code, 'Invalid position')
+                    hasErrors = true
+                    return
+                }
+                if (positions.has(data.order)) {
+                    errorsByType[type].set(code, `Duplicate #${data.order}`)
+                    errorsByType[type].set(positions.get(data.order), `Duplicate #${data.order}`)
+                    hasErrors = true
+                } else {
+                    positions.set(data.order, code)
+                }
+            })
+        })
+
+        setValidationErrorsByType(errorsByType)
+        return !hasErrors
     }
 
     const handleSaveSequence = async () => {
-        if (selectedProducts.size === 0) return
-        if (!validateOrders()) {
-            setError('Please resolve numbering conflicts before saving.')
+        if (totalSelectedCount === 0) return
+        if (!validateAllOrders()) {
+            setError('Please resolve numbering conflicts in all tabs before saving.')
             return
         }
 
         try {
             setProcessing(true)
-            const orders = Array.from(selectedProducts.entries()).map(([code, data]) => {
-                const item = { style_code: code }
-                // Map null back to 999999 for unpinning
-                const orderValue = data.order === null ? 999999 : data.order
-                if (filterType === 'best') item.best_seller_order = orderValue
-                if (filterType === 'recommended') item.recommended_order = orderValue
-                return item
+            const allUpdates = []
+
+            // Process both types
+            const types = ['best', 'recommended']
+            types.forEach(type => {
+                selectionsByType[type].forEach((data, code) => {
+                    const orderValue = data.order === null ? 999999 : data.order
+
+                    // Check if this product already has a pending update in the list
+                    const existingItem = allUpdates.find(u => u.style_code === code)
+                    if (existingItem) {
+                        if (type === 'best') existingItem.best_seller_order = orderValue
+                        if (type === 'recommended') existingItem.recommended_order = orderValue
+                    } else {
+                        const newItem = { style_code: code }
+                        if (type === 'best') newItem.best_seller_order = orderValue
+                        if (type === 'recommended') newItem.recommended_order = orderValue
+                        allUpdates.push(newItem)
+                    }
+                })
             })
 
             const response = await fetch(`${API_BASE}/api/admin/products/order-featured`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ orders })
+                body: JSON.stringify({ orders: allUpdates })
             })
 
-            if (!response.ok) throw new Error('Failed to save sequence')
+            if (!response.ok) throw new Error('Failed to save sequence updates')
 
-            setSuccessMessage('Sequence saved successfully')
-            updateCurrentSelections(new Map())
-            updateCurrentValidationErrors(new Map())
+            setSuccessMessage('All sequence updates saved successfully!')
+            setSelectionsByType({ best: new Map(), recommended: new Map() })
+            setValidationErrorsByType({ best: new Map(), recommended: new Map() })
             await fetchFeatured()
             await fetchAllPinned()
             setTimeout(() => setSuccessMessage(null), 3000)
@@ -441,14 +473,14 @@ const FeaturedProducts = () => {
                             Rebalance
                         </button>
                     )}
-                    {selectedProducts.size > 0 && (
+                    {totalSelectedCount > 0 && (
                         <button
                             onClick={handleSaveSequence}
-                            disabled={processing || (validationErrors.size > 0)}
+                            disabled={processing}
                             className={`px-6 py-2.5 text-white text-xs font-black uppercase tracking-widest rounded-xl shadow-lg transition-all flex items-center gap-2 ${hasUnsavedChanges ? 'bg-amber-500 hover:bg-amber-600 shadow-amber-200/50' : 'bg-primary hover:bg-primary/90 shadow-primary/20'}`}
                         >
                             {processing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                            Save Sequence Updates ({selectedProducts.size})
+                            Save Sequence Updates ({totalSelectedCount})
                         </button>
                     )}
                 </div>
