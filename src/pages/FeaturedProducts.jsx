@@ -378,7 +378,7 @@ const FeaturedProducts = () => {
             const positions = new Map()
 
             selections.forEach((data, code) => {
-                if (data.order === null) return
+                if (data.order === null || data.order === 999999) return
                 if (!Number.isInteger(data.order) || data.order < 1) {
                     errorsByType[type].set(code, 'Invalid position')
                     hasErrors = true
