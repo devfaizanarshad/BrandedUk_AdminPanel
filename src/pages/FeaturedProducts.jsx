@@ -391,7 +391,7 @@ const FeaturedProducts = () => {
             const items = new Map()
             filteredList.forEach(p => {
                 let order = filterType === 'best' ? p.best_seller_order : p.recommended_order
-                if (order === 999999) order = null
+                if (order === 999999 || order == null) order = null
                 items.set(p.style_code, { order, name: p.style_name || p.name })
             })
             setSelectedProducts(items)
@@ -400,6 +400,12 @@ const FeaturedProducts = () => {
             setValidationErrors(new Map())
         }
     }
+
+    // Reset selection when switching categories to avoid position bleed
+    useEffect(() => {
+        setSelectedProducts(new Map())
+        setValidationErrors(new Map())
+    }, [filterType])
 
     return (
         <div className="space-y-8 animate-in fade-in duration-500 max-w-[1600px] mx-auto">
