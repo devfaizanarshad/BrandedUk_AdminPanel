@@ -12,6 +12,13 @@ const Brands = () => {
     const [editingId, setEditingId] = useState(null)
     const [editName, setEditName] = useState('')
     const [saving, setSaving] = useState(false)
+    const [activeSupplier, setActiveSupplier] = useState('Ralawise')
+
+    const suppliers = [
+        { name: 'Ralawise', id: 'ralawise', status: 'active' },
+        { name: 'Uneek', id: 'uneek', status: 'coming_soon' },
+        { name: 'Absolute Apparel', id: 'absolute_apparel', status: 'coming_soon' }
+    ]
 
     useEffect(() => {
         fetchBrands()
@@ -135,9 +142,30 @@ const Brands = () => {
     return (
         <div className="max-w-6xl mx-auto">
             {/* Header */}
-            <div className="mb-8">
-                <h1 className="text-3xl font-bold text-gray-900">Brand Management</h1>
-                <p className="text-gray-500 mt-2">Manage brand profiles, logos, and visibility</p>
+            <div className="mb-8 flex flex-col md:flex-row md:items-end justify-between gap-6">
+                <div>
+                    <h1 className="text-3xl font-bold text-gray-900 tracking-tight">Brand Management</h1>
+                    <p className="text-gray-500 mt-2 font-medium text-lg">Manage brand profiles, logos, and visibility across suppliers.</p>
+                </div>
+
+                {/* Supplier Tabs */}
+                <div className="flex bg-gray-100/80 p-1.5 rounded-2xl border border-gray-200 shadow-sm backdrop-blur-sm self-start md:self-auto">
+                    {suppliers.map(s => (
+                        <button
+                            key={s.id}
+                            onClick={() => setActiveSupplier(s.name)}
+                            className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all duration-300 flex items-center gap-2 ${activeSupplier === s.name
+                                ? 'bg-white text-primary shadow-md transform scale-105'
+                                : 'text-gray-500 hover:text-gray-700 hover:bg-white/50'
+                                }`}
+                        >
+                            {s.name}
+                            {s.status === 'coming_soon' && (
+                                <span className="text-[9px] bg-amber-100 text-amber-600 px-1.5 py-0.5 rounded-full uppercase tracking-tighter">Soon</span>
+                            )}
+                        </button>
+                    ))}
+                </div>
             </div>
 
             {/* Stats Cards */}
@@ -179,106 +207,133 @@ const Brands = () => {
                 </Card>
             </div>
 
-            {/* Search */}
-            <div className="mb-6">
-                <div className="relative max-w-md">
-                    <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                    <input
-                        type="text"
-                        placeholder="Search brands..."
-                        className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:bg-white transition-all shadow-sm"
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                    />
-                </div>
-            </div>
+            {/* Content Based on Active Supplier */}
+            {activeSupplier !== 'Ralawise' ? (
+                <Card className="p-20 text-center border-2 border-dashed border-gray-200 bg-gray-50/30 rounded-[2.5rem] animate-in fade-in zoom-in-95 duration-500">
+                    <div className="w-24 h-24 bg-white rounded-3xl shadow-xl flex items-center justify-center mx-auto mb-8 transform rotate-6 hover:rotate-0 transition-transform duration-500">
+                        <Upload className="w-12 h-12 text-primary/20 animate-pulse" />
+                    </div>
+                    <h2 className="text-3xl font-black text-gray-900 mb-4">{activeSupplier} Integration</h2>
+                    <p className="text-gray-500 text-lg max-w-md mx-auto font-medium leading-relaxed">
+                        We are currently mapping the brand database for <span className="text-primary font-bold">{activeSupplier}</span>.
+                        This feature will be available shortly.
+                    </p>
+                    <div className="mt-10 flex justify-center gap-4">
+                        <div className="px-6 py-2 bg-amber-50 text-amber-600 rounded-full text-sm font-black uppercase tracking-widest shadow-sm">Coming Soon</div>
+                        <button onClick={() => setActiveSupplier('Ralawise')} className="px-6 py-2 bg-white text-gray-500 hover:text-primary rounded-full text-sm font-bold border border-gray-200 shadow-sm transition-all hover:shadow-md">Return to Ralawise</button>
+                    </div>
+                </Card>
+            ) : (
+                <>
+                    {/* Search */}
+                    <div className="mb-6">
+                        <div className="relative max-w-md">
+                            <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                            <input
+                                type="text"
+                                placeholder={`Search ${activeSupplier} brands...`}
+                                className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:bg-white transition-all shadow-sm"
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                            />
+                        </div>
+                    </div>
 
-            {/* Brands Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredBrands.map((brand) => (
-                    <Card key={brand.id} className={`p-6 transition-all ${!brand.active ? 'opacity-60' : ''}`}>
-                        <div className="flex items-start justify-between mb-4">
-                            {/* Logo */}
-                            <div className="relative group">
-                                <div className="w-16 h-16 rounded bg-gray-100 flex items-center justify-center overflow-hidden">
-                                    {brand.logo ? (
-                                        <img src={brand.logo} alt={brand.name} className="w-full h-full object-contain" />
+                    {/* Brands Grid */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {filteredBrands.map((brand) => (
+                            <Card key={brand.id} className={`p-6 transition-all rounded-3xl hover:shadow-xl hover:shadow-primary/5 group ${!brand.active ? 'opacity-60 grayscale' : 'hover:-translate-y-1'}`}>
+                                <div className="flex items-start justify-between mb-6">
+                                    {/* Logo */}
+                                    <div className="relative group/logo">
+                                        <div className="w-20 h-20 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-center overflow-hidden shadow-inner group-hover:bg-white transition-colors">
+                                            {brand.logo ? (
+                                                <img src={brand.logo} alt={brand.name} className="w-full h-full object-contain p-2" />
+                                            ) : (
+                                                <Building2 className="w-10 h-10 text-slate-200" />
+                                            )}
+                                        </div>
+                                        <button
+                                            onClick={() => handleImageUpload(brand.id)}
+                                            className="absolute inset-0 bg-primary/80 backdrop-blur-sm rounded-2xl opacity-0 group-hover/logo:opacity-100 transition-all duration-300 flex items-center justify-center transform scale-90 group-hover/logo:scale-100"
+                                        >
+                                            <Upload className="w-8 h-8 text-white" />
+                                        </button>
+                                    </div>
+
+                                    {/* Status Toggle */}
+                                    <button
+                                        onClick={() => handleToggleActive(brand)}
+                                        className={`p-2.5 rounded-xl transition-all duration-300 shadow-sm
+                                          ${brand.active
+                                                ? 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100 hover:scale-110'
+                                                : 'bg-slate-50 text-slate-400 hover:bg-slate-100'
+                                            }`}
+                                        title={brand.active ? 'Deactivate Brand' : 'Activate Brand'}
+                                    >
+                                        {brand.active ? <ToggleRight className="w-6 h-6" /> : <ToggleLeft className="w-6 h-6" />}
+                                    </button>
+                                </div>
+
+                                {/* Name */}
+                                <div className="mb-6">
+                                    {editingId === brand.id ? (
+                                        <div className="flex items-center gap-2">
+                                            <input
+                                                type="text"
+                                                value={editName}
+                                                onChange={(e) => setEditName(e.target.value)}
+                                                className="flex-1 px-4 py-2 bg-white border-2 border-primary rounded-xl focus:outline-none text-lg font-black text-gray-900"
+                                                autoFocus
+                                            />
+                                            <div className="flex gap-1">
+                                                <button
+                                                    onClick={cancelEditing}
+                                                    className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                                                >
+                                                    <X className="w-5 h-5" />
+                                                </button>
+                                                <button
+                                                    onClick={() => saveEdit(brand)}
+                                                    className="p-2 text-primary hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
+                                                >
+                                                    <Check className="w-5 h-5" />
+                                                </button>
+                                            </div>
+                                        </div>
                                     ) : (
-                                        <Building2 className="w-8 h-8 text-gray-400" />
+                                        <div className="flex items-center justify-between group/title">
+                                            <h3 className="text-xl font-black text-slate-900 tracking-tight group-hover/title:text-primary transition-colors">{brand.name}</h3>
+                                            <button
+                                                onClick={() => startEditing(brand)}
+                                                className="p-2 text-slate-300 hover:text-primary hover:bg-primary/5 rounded-xl transition-all opacity-0 group-hover:opacity-100"
+                                            >
+                                                <Edit3 className="w-4 h-4" />
+                                            </button>
+                                        </div>
                                     )}
                                 </div>
-                                <button
-                                    onClick={() => handleImageUpload(brand.id)}
-                                    className="absolute inset-0 bg-black/50 rounded opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
-                                >
-                                    <Upload className="w-6 h-6 text-white" />
-                                </button>
-                            </div>
 
-                            {/* Status Toggle */}
-                            <button
-                                onClick={() => handleToggleActive(brand)}
-                                className={`p-2 rounded transition-colors
-                  ${brand.active
-                                        ? 'bg-green-100 text-green-600 hover:bg-green-200'
-                                        : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
-                                    }`}
-                            >
-                                {brand.active ? <ToggleRight className="w-5 h-5" /> : <ToggleLeft className="w-5 h-5" />}
-                            </button>
-                        </div>
-
-                        {/* Name */}
-                        <div className="mb-4">
-                            {editingId === brand.id ? (
-                                <div className="flex items-center gap-2">
-                                    <input
-                                        type="text"
-                                        value={editName}
-                                        onChange={(e) => setEditName(e.target.value)}
-                                        className="flex-1 px-3 py-2 border-2 border-primary rounded-lg focus:outline-none text-lg font-semibold"
-                                        autoFocus
-                                    />
-                                    <button
-                                        onClick={cancelEditing}
-                                        className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg"
-                                    >
-                                        <X className="w-5 h-5" />
-                                    </button>
-                                    <button
-                                        onClick={() => saveEdit(brand)}
-                                        className="p-2 text-green-600 hover:bg-green-50 rounded-lg"
-                                    >
-                                        <Check className="w-5 h-5" />
-                                    </button>
+                                {/* Stats Footer */}
+                                <div className="pt-6 border-t border-slate-50 flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></div>
+                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Live Products</span>
+                                    </div>
+                                    <span className="font-black text-slate-900 bg-slate-50 px-3 py-1 rounded-full text-xs border border-slate-100">{brand.productCount || 0}</span>
                                 </div>
-                            ) : (
-                                <div className="flex items-center justify-between">
-                                    <h3 className="text-lg font-semibold text-gray-900">{brand.name}</h3>
-                                    <button
-                                        onClick={() => startEditing(brand)}
-                                        className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-                                    >
-                                        <Edit3 className="w-4 h-4" />
-                                    </button>
-                                </div>
-                            )}
-                        </div>
+                            </Card>
+                        ))}
+                    </div>
 
-                        {/* Product Count */}
-                        <div className="flex items-center justify-between text-sm">
-                            <span className="text-gray-500">Products</span>
-                            <span className="font-medium text-gray-900">{brand.productCount || 0}</span>
-                        </div>
-                    </Card>
-                ))}
-            </div>
-
-            {filteredBrands.length === 0 && (
-                <Card className="p-12 text-center">
-                    <Building2 className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-                    <div className="text-gray-500">No brands found</div>
-                </Card>
+                    {filteredBrands.length === 0 && (
+                        <Card className="p-20 text-center rounded-[2.5rem] bg-gray-50/30 border-2 border-dashed border-gray-100">
+                            <Building2 className="w-16 h-16 text-gray-200 mx-auto mb-6" />
+                            <div className="text-lg font-black text-gray-400 uppercase tracking-widest">No matching brands</div>
+                            <button onClick={() => setSearchTerm('')} className="mt-4 text-primary font-bold hover:underline">Clear Search</button>
+                        </Card>
+                    )}
+                </>
             )}
         </div>
     )
