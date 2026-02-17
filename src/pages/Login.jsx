@@ -21,7 +21,7 @@ const Login = ({ onLogin }) => {
 
         // Simulate API call
         setTimeout(() => {
-            if (email === 'admin@branduduk.co.uk' && password === 'admin123') {
+            if (email === 'info@brandeduk.com' && password === 'omglol123') {
                 onLogin({ name: 'Admin User', email })
             } else {
                 setError('Unauthorized access. Please check your credentials.')
@@ -139,9 +139,6 @@ const Login = ({ onLogin }) => {
                         <div className="space-y-2">
                             <div className="flex justify-between items-center px-1">
                                 <label className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">Password</label>
-                                <button type="button" className="text-[11px] font-bold text-[#7c3aed] uppercase tracking-widest hover:text-[#6d28d9] transition-colors">
-                                    Forgot?
-                                </button>
                             </div>
                             <div className="relative group">
                                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">

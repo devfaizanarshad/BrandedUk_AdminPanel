@@ -156,6 +156,16 @@ const ProductDetail = () => {
         }
     }, [product, editCartonPrice, editMarkupTier])
 
+    const priceBreaksModified = useMemo(() => {
+        const originalTiers = priceOverrides.has_overrides ? priceOverrides.overrides : priceOverrides.global_tiers
+        if (!originalTiers || originalTiers.length === 0) return priceBreaksEditData.length > 0
+        if (priceBreaksEditData.length !== originalTiers.length) return true
+        return priceBreaksEditData.some((pb, i) => {
+            const orig = originalTiers[i]
+            return pb.min_qty !== orig.min_qty || pb.max_qty !== orig.max_qty || pb.discount_percent !== orig.discount_percent
+        })
+    }, [priceBreaksEditData, priceOverrides])
+
     const handleDiscontinue = async () => {
         if (!confirm('Are you sure you want to discontinue this product?')) return
 
@@ -236,8 +246,8 @@ const ProductDetail = () => {
         try {
             setSavingPrice(true)
 
-            // Call the carton price update API
-            const response = await fetch(`${API_BASE}/api/admin/products/${code}/carton-price`, {
+            // 1. Update carton price (base cost)
+            const cartonResponse = await fetch(`${API_BASE}/api/admin/products/${code}/carton-price`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -246,21 +256,32 @@ const ProductDetail = () => {
                 })
             })
 
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}))
+            if (!cartonResponse.ok) {
+                const errorData = await cartonResponse.json().catch(() => ({}))
                 throw new Error(errorData.message || 'Failed to update carton price')
             }
 
-            const data = await response.json()
+            // 2. Update markup using the bulk override API to ensure persistence
+            const markupResponse = await fetch(`${API_BASE}/api/admin/products/bulk-markup-override`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    overrides: [{
+                        style_code: code,
+                        markup_percent: parseFloat(editMarkupTier)
+                    }]
+                })
+            })
 
-            // After carton price is updated, we also reset price breaks to defaults if user hasn't touched overrides
-            // Or we keep existing overrides. For now, let's just refresh the product.
+            if (!markupResponse.ok) {
+                const errorData = await markupResponse.json().catch(() => ({}))
+                throw new Error(errorData.message || 'Failed to update markup percentage')
+            }
 
             setPricingMode(false)
             await fetchProduct()
 
-            // Show success message
-            setSuccessMessage(`Success! Updated ${data.updatedCount} product SKUs with new pricing.`)
+            setSuccessMessage(`Success! Product pricing and markup updated.`)
             setTimeout(() => setSuccessMessage(null), 5000)
         } catch (err) {
             setError(err.message)
@@ -867,14 +888,16 @@ const ProductDetail = () => {
                                             <Calculator className="w-4 h-4 inline mr-2" />
                                             {savingPrice ? 'Saving...' : 'Update Base Calc'}
                                         </button>
-                                        <button
-                                            onClick={handleSavePriceOverrides}
-                                            disabled={savingOverrides}
-                                            className="px-4 py-2 bg-primary text-white text-sm font-semibold rounded-xl hover:bg-accent transition-colors disabled:opacity-50 shadow-lg shadow-primary/25"
-                                        >
-                                            <Save className="w-4 h-4 inline mr-2" />
-                                            {savingOverrides ? 'Saving...' : 'Apply Discounts'}
-                                        </button>
+                                        {priceBreaksModified && (
+                                            <button
+                                                onClick={handleSavePriceOverrides}
+                                                disabled={savingOverrides}
+                                                className="px-4 py-2 bg-primary text-white text-sm font-semibold rounded-xl hover:bg-accent transition-colors disabled:opacity-50 shadow-lg shadow-primary/25"
+                                            >
+                                                <Save className="w-4 h-4 inline mr-2" />
+                                                {savingOverrides ? 'Saving...' : 'Apply Discounts'}
+                                            </button>
+                                        )}
                                     </div>
                                 ) : (
                                     <button

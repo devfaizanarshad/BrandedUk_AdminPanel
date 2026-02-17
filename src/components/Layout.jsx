@@ -367,7 +367,7 @@ const Layout = ({ children, onLogout }) => {
             </div>
 
             <div className="flex items-center gap-5">
-              <a href="#" className="flex items-center gap-2 text-[11px] font-black text-slate-500 hover:text-primary transition-colors uppercase tracking-tight font-sans">
+              <a href="https://www.brandeduk.com/" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-[11px] font-black text-slate-500 hover:text-primary transition-colors uppercase tracking-tight font-sans">
                 <Store className="w-4 h-4" />
                 <span>Storefront</span>
               </a>
