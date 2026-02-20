@@ -27,7 +27,7 @@ import {
   LogOut,
   X
 } from 'lucide-react'
-import { useState } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 
 const Layout = ({ children, onLogout }) => {
   const location = useLocation()
@@ -35,6 +35,49 @@ const Layout = ({ children, onLogout }) => {
   const [syncing, setSyncing] = useState(false)
   const [syncStatus, setSyncStatus] = useState(null)
   const [showSyncModal, setShowSyncModal] = useState(false)
+
+  // Header Search State
+  const [searchQuery, setSearchQuery] = useState('')
+  const [suggestions, setSuggestions] = useState({ products: [], brands: [], types: [] })
+  const [isSearching, setIsSearching] = useState(false)
+  const [showSuggestions, setShowSuggestions] = useState(false)
+  const searchRef = useRef(null)
+
+  // Handle Search Suggestions
+  useEffect(() => {
+    const fetchSuggestions = async () => {
+      if (searchQuery.length < 2) {
+        setSuggestions({ products: [], brands: [], types: [] })
+        return
+      }
+
+      try {
+        setIsSearching(true)
+        const response = await fetch(`https://api.brandeduk.com/api/products/suggest?q=${encodeURIComponent(searchQuery)}`)
+        if (!response.ok) throw new Error('Search failed')
+        const data = await response.json()
+        setSuggestions(data)
+      } catch (err) {
+        console.error('Search error:', err)
+      } finally {
+        setIsSearching(false)
+      }
+    }
+
+    const timer = setTimeout(fetchSuggestions, 300)
+    return () => clearTimeout(timer)
+  }, [searchQuery])
+
+  // Click outside search to close
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (searchRef.current && !searchRef.current.contains(event.target)) {
+        setShowSuggestions(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
 
   // State for collapsible sub-menus
   const [expandedMenus, setExpandedMenus] = useState(['Products'])
@@ -138,7 +181,7 @@ const Layout = ({ children, onLogout }) => {
 
         {/* Logo Section - Sharp & Dark */}
         <div className="h-16 flex items-center px-6 border-b border-white/10 relative z-10">
-          <div className="flex items-center gap-3">
+          <Link to="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
             <div className="w-7 h-7 rounded bg-primary flex items-center justify-center shadow-[0_0_15px_rgba(124,58,237,0.4)]">
               <span className="text-white font-black text-base">B</span>
             </div>
@@ -146,7 +189,7 @@ const Layout = ({ children, onLogout }) => {
               <h1 className="text-[14px] font-bold text-white tracking-tight leading-none">BrandedUK</h1>
               <p className="text-[10px] text-primary/60 font-medium mt-1 uppercase tracking-wider">Admin</p>
             </div>
-          </div>
+          </Link>
         </div>
 
         {/* Navigation - Calm & Structured */}
@@ -348,15 +391,131 @@ const Layout = ({ children, onLogout }) => {
         )}
 
         {/* Top Header */}
-        < header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-8 z-10" >
+        <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-8 z-[60]" >
           <div className="flex items-center flex-1 max-w-xl">
-            <div className="relative w-full group">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 group-focus-within:text-primary transition-colors" />
+            <div className="relative w-full group" ref={searchRef}>
+              <Search className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors ${showSuggestions ? 'text-primary' : 'text-gray-400'}`} />
               <input
                 type="text"
-                placeholder="Search products, orders..."
-                className="w-full bg-gray-50 border border-gray-200 rounded py-1.5 pl-10 pr-4 text-sm focus:outline-none focus:ring-1 focus:ring-primary focus:bg-white transition-all"
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value)
+                  setShowSuggestions(true)
+                }}
+                onFocus={() => {
+                  if (searchQuery.length >= 2) setShowSuggestions(true)
+                }}
+                placeholder="Search products, brands or categories..."
+                className="w-full bg-gray-50 border border-gray-200 rounded py-2 pl-10 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary focus:bg-white transition-all shadow-sm"
               />
+              {isSearching && (
+                <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                  <Loader2 className="w-4 h-4 text-primary animate-spin" />
+                </div>
+              )}
+
+              {/* Suggestions Dropdown */}
+              {showSuggestions && searchQuery.length >= 2 && (
+                <div className="absolute top-full left-0 w-full mt-2 bg-white rounded-xl shadow-[0_15px_50px_-12px_rgba(0,0,0,0.15)] border border-gray-100 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200 max-h-[520px] overflow-y-auto">
+
+                  {/* Products Section */}
+                  {suggestions.products.length > 0 && (
+                    <div className="p-2 border-b border-gray-50">
+                      <div className="px-3 py-2 text-[10px] font-black text-slate-400 uppercase tracking-[0.08em] flex items-center justify-between">
+                        <span>Products</span>
+                        <Package className="w-3 h-3" />
+                      </div>
+                      <div className="space-y-1">
+                        {suggestions.products.map((p) => (
+                          <div
+                            key={p.value}
+                            onClick={() => {
+                              navigate(`/products/${p.value}`)
+                              setShowSuggestions(false)
+                              setSearchQuery('')
+                            }}
+                            className="w-full flex items-center gap-3 p-2 hover:bg-primary/5 rounded-lg transition-colors cursor-pointer group"
+                          >
+                            <div className="w-10 h-10 rounded-md bg-gray-50 border border-gray-100 overflow-hidden flex-shrink-0">
+                              <img src={p.image} alt="" className="w-full h-full object-contain" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-bold text-slate-900 truncate tracking-tight">{p.label}</p>
+                              <div className="flex items-center gap-2 mt-0.5">
+                                <span className="text-[11px] font-medium text-slate-400">{p.value}</span>
+                                <span className="w-1 h-1 rounded-full bg-slate-200" />
+                                <span className="text-[11px] font-bold text-primary/70 uppercase tracking-tighter">{p.brand}</span>
+                              </div>
+                            </div>
+                            <ExternalLink className="w-4 h-4 text-slate-200 group-hover:text-primary transition-colors pr-2" />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Types Section */}
+                  {suggestions.types.length > 0 && (
+                    <div className="p-2 border-b border-gray-50 bg-slate-50/50">
+                      <div className="px-3 py-2 text-[10px] font-black text-slate-400 uppercase tracking-[0.08em] flex items-center justify-between">
+                        <span>Categories</span>
+                        <Tags className="w-3 h-3" />
+                      </div>
+                      <div className="grid grid-cols-2 gap-1">
+                        {suggestions.types.map((t) => (
+                          <div
+                            key={t.value}
+                            onClick={() => {
+                              navigate(`/products?type=${t.value}`)
+                              setShowSuggestions(false)
+                              setSearchQuery('')
+                            }}
+                            className="flex items-center gap-2 px-3 py-2 hover:bg-white rounded-lg border border-transparent hover:border-gray-200 transition-all cursor-pointer shadow-sm shadow-transparent hover:shadow-slate-100"
+                          >
+                            <span className="text-xs font-bold text-slate-700 tracking-tight">{t.label}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Brands Section */}
+                  {suggestions.brands.length > 0 && (
+                    <div className="p-2">
+                      <div className="px-3 py-2 text-[10px] font-black text-slate-400 uppercase tracking-[0.08em] flex items-center justify-between">
+                        <span>Top Brands</span>
+                        <Building2 className="w-3 h-3" />
+                      </div>
+                      <div className="flex flex-wrap gap-1 px-3 py-1">
+                        {suggestions.brands.map((b) => (
+                          <div
+                            key={b.value}
+                            onClick={() => {
+                              navigate(`/products?brand=${b.value}`)
+                              setShowSuggestions(false)
+                              setSearchQuery('')
+                            }}
+                            className="px-2.5 py-1 bg-white border border-gray-200 rounded text-[11px] font-bold text-slate-600 hover:border-primary hover:text-primary transition-all cursor-pointer"
+                          >
+                            {b.label}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* No Results Fallback */}
+                  {!isSearching && suggestions.products.length === 0 && suggestions.brands.length === 0 && suggestions.types.length === 0 && (
+                    <div className="p-10 text-center">
+                      <div className="w-12 h-12 rounded-full bg-slate-50 flex items-center justify-center mx-auto mb-4">
+                        <Search className="w-6 h-6 text-slate-300" />
+                      </div>
+                      <p className="text-sm font-bold text-slate-900">No suggestions found</p>
+                      <p className="text-xs text-slate-400 mt-1">Try searching for something else</p>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
@@ -399,16 +558,16 @@ const Layout = ({ children, onLogout }) => {
               </div>
             </div>
           </div>
-        </header >
+        </header>
 
         {/* Content Area */}
-        < main className="flex-1 overflow-auto p-10 relative" >
+        <main className="flex-1 overflow-auto p-10 relative">
           <div className="max-w-[1600px] mx-auto">
             {children}
           </div>
-        </main >
-      </div >
-    </div >
+        </main>
+      </div>
+    </div>
   )
 }
 

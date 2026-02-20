@@ -146,12 +146,13 @@ const FeaturedProducts = () => {
             const originalOrder = type === 'best' ? product.best_seller_order : product.recommended_order
             const isOriginallyFeatured = originalOrder !== 999999 && originalOrder != null
 
-            let isCurrentlyFeatured = currentSelection
+            const isOriginallyActive = type === 'best' ? !!product.is_best_seller : !!product.is_recommended
+            let isCurrentlyActive = currentSelection
                 ? currentSelection.order !== 999999
-                : isOriginallyFeatured
+                : (isOriginallyActive || isOriginallyFeatured)
 
             let nextOrder
-            if (isCurrentlyFeatured) {
+            if (isCurrentlyActive) {
                 nextOrder = 999999
             } else {
                 // If originally had a position, restore it, otherwise give it next available or unpinned
@@ -651,8 +652,11 @@ const FeaturedProducts = () => {
                                             const getStatus = (type) => {
                                                 const sel = selectionsByType[type].get(code)
                                                 if (sel) return sel.order !== 999999
+
                                                 const order = type === 'best' ? product.best_seller_order : product.recommended_order
-                                                return order !== 999999 && order != null
+                                                const isFlagged = type === 'best' ? product.is_best_seller : product.is_recommended
+
+                                                return (order !== 999999 && order != null) || !!isFlagged
                                             }
                                             const isBestSeller = getStatus('best')
                                             const isRecommended = getStatus('recommended')
