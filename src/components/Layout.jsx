@@ -149,6 +149,7 @@ const Layout = ({ children, onLogout }) => {
             { name: 'Product Type', path: '/product-types' },
             { name: 'Catalog Curator', path: '/featured' },
             { name: 'Home Highlights', path: '/featured-products' },
+            { name: 'Humanitiees Products', path: '/humanitiees-products' },
           ]
         }
       ]

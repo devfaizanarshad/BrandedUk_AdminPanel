@@ -1127,9 +1127,19 @@ const Orders = () => {
                                                                             </div>
                                                                         </div>
 
-                                                                        {/* Size Breakdown */}
+                                                                        {/* Size & Quantity Display */}
                                                                         <div className="mt-3 flex flex-wrap gap-2">
-                                                                            {Object.entries(item.sizes || {}).map(([size, qty]) => (
+                                                                            {/* If data has single size/quantity fields */}
+                                                                            {item.size && (
+                                                                                <div className="px-2 py-1 rounded-md bg-primary/5 border border-primary/10 text-xs font-medium text-primary flex items-center gap-1.5">
+                                                                                    <span className="font-bold">Size: {item.size}</span>
+                                                                                    <span className="opacity-40">|</span>
+                                                                                    <span>Qty: {item.quantity || 0}</span>
+                                                                                </div>
+                                                                            )}
+
+                                                                            {/* If data has the sizes breakdown object */}
+                                                                            {item.sizes && Object.entries(item.sizes).map(([size, qty]) => (
                                                                                 qty > 0 && (
                                                                                     <div key={size} className="px-2 py-1 rounded-md bg-slate-100 border border-slate-200 text-xs font-medium text-slate-600 flex items-center gap-1.5">
                                                                                         <span className="font-bold text-slate-800">{size}</span>
