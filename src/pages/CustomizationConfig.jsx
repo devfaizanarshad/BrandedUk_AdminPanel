@@ -606,10 +606,20 @@ const CustomizationConfig = () => {
                                                 />
                                             </label>
                                             <div className="mt-3 flex flex-wrap gap-2">
-                                                <div className="inline-flex items-center px-3 py-2 bg-gray-100 text-gray-700 rounded">
+                                                <label className="inline-flex items-center px-3 py-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200 cursor-pointer transition-colors">
                                                     <Upload className="w-4 h-4 mr-2" />
-                                                    {position.preview_image_url ? 'Image ready' : 'Upload an image'}
-                                                </div>
+                                                    {position.preview_image_url ? 'Change image' : 'Upload an image'}
+                                                    <input
+                                                        type="file"
+                                                        accept="image/*"
+                                                        className="hidden"
+                                                        onChange={(e) => {
+                                                            const file = e.target.files?.[0]
+                                                            handleUploadImage(position, file)
+                                                            e.target.value = ''
+                                                        }}
+                                                    />
+                                                </label>
                                                 {position.preview_image_url && (
                                                     <button
                                                         type="button"
