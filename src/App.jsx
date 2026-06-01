@@ -54,7 +54,8 @@ function App() {
     <Router>
       <Layout onLogout={handleLogout}>
         <Routes>
-          <Route path="/" element={<Dashboard />} />
+          <Route path="/" element={<Orders />} />
+          <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/products" element={<Products />} />
           <Route path="/products/:code" element={<ProductDetail />} />
           <Route path="/markup-tiers" element={<MarkupTiers />} />

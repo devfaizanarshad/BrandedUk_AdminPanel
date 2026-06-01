@@ -131,7 +131,8 @@ const Layout = ({ children, onLogout }) => {
     {
       title: 'Navigation',
       items: [
-        { name: 'Dashboard', path: '/', icon: LayoutDashboard },
+        { name: 'Orders', path: '/', icon: ShoppingCart },
+        { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
         { name: 'Calendar', path: '/calendar', icon: CalendarDays },
       ]
     },
@@ -164,7 +165,6 @@ const Layout = ({ children, onLogout }) => {
     {
       title: 'Operations',
       items: [
-        { name: 'Orders', path: '/orders', icon: ShoppingCart },
         { name: 'Customers', path: '/customers', icon: Users },
         { name: 'Brands', path: '/brands', icon: Building2 },
         { name: 'Customization', path: '/customization', icon: Palette },
@@ -175,7 +175,7 @@ const Layout = ({ children, onLogout }) => {
 
   const isActive = (path) => {
     if (!path) return false
-    if (path === '/') return location.pathname === '/' || location.pathname.startsWith('/products/')
+    if (path === '/') return location.pathname === '/' || location.pathname === '/orders'
     if (path.includes('ignore')) return false
     return location.pathname === path || location.pathname.startsWith(path + '/')
   }
