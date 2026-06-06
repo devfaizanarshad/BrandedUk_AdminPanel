@@ -66,6 +66,7 @@ function App() {
           <Route path="/featured-products" element={<FeaturedProductsManage />} />
           <Route path="/customization" element={<CustomizationConfig />} />
           <Route path="/orders" element={<Orders />} />
+          <Route path="/orders/:orderId" element={<Orders />} />
           <Route path="/customers" element={<Customers />} />
           <Route path="/calendar" element={<Calendar />} />
           <Route path="/system" element={<System />} />

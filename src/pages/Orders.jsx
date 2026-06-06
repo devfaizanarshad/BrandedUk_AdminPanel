@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import Card from '../components/Card'
 import {
     Search,
@@ -30,13 +30,18 @@ import {
     X,
     Image as ImageIcon,
     Send,
-    BadgePercent
+    BadgePercent,
+    ArrowLeft,
+    ChevronRight,
+    UserX
 } from 'lucide-react'
 
 import { API_BASE } from '../config'
 import WorkflowDropdown, { WORKFLOW_STATUSES, getStatusStyle } from '../components/WorkflowDropdown'
 
 const Orders = () => {
+    const navigate = useNavigate()
+    const { orderId } = useParams()
     const [searchParams] = useSearchParams()
     const [orders, setOrders] = useState([])
     const [loading, setLoading] = useState(true)
@@ -50,12 +55,14 @@ const Orders = () => {
     const [deletingOrder, setDeletingOrder] = useState(null)
     const [selectedOrders, setSelectedOrders] = useState(new Set())
     const [bulkDeleting, setBulkDeleting] = useState(false)
+    const [deletingCustomerKey, setDeletingCustomerKey] = useState(null)
     const [quoteAdjustments, setQuoteAdjustments] = useState({})
     const [sendingQuote, setSendingQuote] = useState(null)
     const [quoteActionMessage, setQuoteActionMessage] = useState(null)
     const [loadedRevisionOrderIds, setLoadedRevisionOrderIds] = useState(new Set())
     const [revisionTotals, setRevisionTotals] = useState({})
     const requestedOpenOrderId = searchParams.get('open')
+    const isDetailPage = Boolean(orderId)
 
     useEffect(() => {
         fetchOrders()
@@ -67,16 +74,20 @@ const Orders = () => {
         const targetOrder = orders.find((order) => String(order.id) === String(requestedOpenOrderId))
         if (!targetOrder) return
 
+        navigate(`/orders/${encodeURIComponent(targetOrder.quote_id || targetOrder.id)}`, { replace: true })
+    }, [orders, requestedOpenOrderId, navigate])
+
+    useEffect(() => {
+        if (!orderId || orders.length === 0) return
+
+        const targetOrder = orders.find((order) => (
+            String(order.id) === String(orderId) || String(order.quote_id) === String(orderId)
+        ))
+        if (!targetOrder) return
+
         setExpandedOrder(targetOrder.id)
         hydrateLatestQuoteRevision(targetOrder)
-
-        const timeoutId = window.setTimeout(() => {
-            const element = document.getElementById(`invoice-content-${targetOrder.id}`)
-            element?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-        }, 150)
-
-        return () => window.clearTimeout(timeoutId)
-    }, [orders, requestedOpenOrderId])
+    }, [orders, orderId])
 
     useEffect(() => {
         if (!quoteActionMessage) return
@@ -131,9 +142,7 @@ const Orders = () => {
         }
     }
 
-    const PDF_SNAPSHOT_WIDTH = 1560
-    const PDF_PAGE_WIDTH_MM = 458
-    const PDF_PAGE_HEIGHT_MM = 324
+    const PDF_SNAPSHOT_WIDTH = 1120
     const PDF_PAGE_PADDING_PX = 24
 
     const buildPrintDocument = (content) => {
@@ -172,12 +181,12 @@ const Orders = () => {
 
                         @page {
                             margin: 0;
-                            size: ${PDF_PAGE_WIDTH_MM}mm ${PDF_PAGE_HEIGHT_MM}mm;
+                            size: A4 landscape;
                         }
 
                         @media print {
                             @page {
-                                size: ${PDF_PAGE_WIDTH_MM}mm ${PDF_PAGE_HEIGHT_MM}mm;
+                                size: A4 landscape;
                                 margin: 0;
                             }
 
@@ -189,7 +198,7 @@ const Orders = () => {
                             }
 
                             body {
-                                padding: ${PDF_PAGE_PADDING_PX}px;
+                                padding: 8px;
                             }
 
                             .pdf-print-root {
@@ -200,6 +209,8 @@ const Orders = () => {
                                 transform: none !important;
                                 rotate: none !important;
                                 writing-mode: horizontal-tb !important;
+                                break-inside: avoid !important;
+                                page-break-inside: avoid !important;
                             }
 
                             .pdf-print-root,
@@ -216,6 +227,101 @@ const Orders = () => {
                             .quote-admin-only {
                                 display: none !important;
                             }
+
+                            .quote-print-shell {
+                                border: 0 !important;
+                                box-shadow: none !important;
+                                background: #ffffff !important;
+                            }
+
+                            .quote-print-content {
+                                padding: 0 !important;
+                            }
+
+                            .quote-print-layout {
+                                display: grid !important;
+                                grid-template-columns: 31% minmax(0, 69%) !important;
+                                gap: 14px !important;
+                                padding: 0 !important;
+                                background: #ffffff !important;
+                                align-items: start !important;
+                                break-inside: avoid !important;
+                                page-break-inside: avoid !important;
+                            }
+
+                            .quote-print-sidebar,
+                            .quote-print-main {
+                                min-width: 0 !important;
+                            }
+
+                            .quote-print-sidebar > * + *,
+                            .quote-print-main > * + * {
+                                margin-top: 12px !important;
+                            }
+
+                            .quote-print-card {
+                                padding: 12px !important;
+                                border-radius: 12px !important;
+                                box-shadow: none !important;
+                                break-inside: avoid;
+                            }
+
+                            .quote-print-card h4 {
+                                margin-bottom: 8px !important;
+                            }
+
+                            .quote-print-card .space-y-3 > * + *,
+                            .quote-print-card .space-y-4 > * + * {
+                                margin-top: 7px !important;
+                            }
+
+                            .quote-print-logo-preview {
+                                height: 112px !important;
+                            }
+
+                            .quote-print-cost {
+                                padding: 14px !important;
+                                border-radius: 14px !important;
+                                box-shadow: none !important;
+                                break-inside: avoid;
+                            }
+
+                            .quote-print-cost h4 {
+                                margin-bottom: 10px !important;
+                                font-size: 18px !important;
+                            }
+
+                            .quote-print-cost .space-y-4 > * + * {
+                                margin-top: 8px !important;
+                            }
+
+                            .quote-print-cost .p-5,
+                            .quote-print-cost .lg\\:p-6 {
+                                padding: 11px !important;
+                            }
+
+                            .quote-print-cost .text-2xl,
+                            .quote-print-cost .lg\\:text-3xl {
+                                font-size: 19px !important;
+                                line-height: 1.15 !important;
+                            }
+
+                            .quote-print-items {
+                                box-shadow: none !important;
+                                border-radius: 12px !important;
+                                break-inside: avoid;
+                            }
+
+                            .quote-print-items .p-4,
+                            .quote-print-items .p-6 {
+                                padding: 10px !important;
+                            }
+
+                            .quote-print-items .w-16.h-16 {
+                                width: 48px !important;
+                                height: 48px !important;
+                            }
+
                         }
                     </style>
                 </head>
@@ -360,6 +466,71 @@ const Orders = () => {
         setBulkDeleting(false)
 
         if (failed.length > 0) alert(`${failed.length} order(s) failed to delete.`)
+    }
+
+    const getCustomerKey = (order) => {
+        const email = String(order.customer_email || '').trim().toLowerCase()
+        if (email) return `email:${email}`
+        return `name:${String(order.customer_name || '').trim().toLowerCase()}`
+    }
+
+    const handleDeleteCustomerOrders = async (order) => {
+        const customerKey = getCustomerKey(order)
+        setDeletingCustomerKey(customerKey)
+
+        let allOrders = orders
+        try {
+            const response = await fetch(`${API_BASE}/api/admin/quotes?limit=10000`)
+            if (response.ok) {
+                const data = await response.json()
+                allOrders = data.items || orders
+            }
+        } catch (error) {
+            console.warn('Could not load the full customer order list before deletion:', error)
+        }
+
+        const customerOrders = allOrders.filter((item) => getCustomerKey(item) === customerKey)
+        if (customerOrders.length === 0) {
+            setDeletingCustomerKey(null)
+            return
+        }
+        const customerLabel = order.customer_email || order.customer_name || 'this customer'
+        const confirmed = window.confirm(
+            `Delete all ${customerOrders.length} order${customerOrders.length === 1 ? '' : 's'} for ${customerLabel}? This cannot be undone.`
+        )
+        if (!confirmed) {
+            setDeletingCustomerKey(null)
+            return
+        }
+
+        const failedIds = []
+
+        await Promise.all(customerOrders.map(async (customerOrder) => {
+            try {
+                const response = await fetch(`${API_BASE}/api/admin/quotes/${customerOrder.id}`, { method: 'DELETE' })
+                if (!response.ok) failedIds.push(customerOrder.id)
+            } catch {
+                failedIds.push(customerOrder.id)
+            }
+        }))
+
+        const customerOrderIds = new Set(customerOrders.map((item) => item.id))
+        setOrders((prev) => prev.filter((item) => !customerOrderIds.has(item.id) || failedIds.includes(item.id)))
+        setSelectedOrders((prev) => {
+            const next = new Set(prev)
+            customerOrders.forEach((item) => {
+                if (!failedIds.includes(item.id)) next.delete(item.id)
+            })
+            return next
+        })
+        setDeletingCustomerKey(null)
+
+        setQuoteActionMessage({
+            type: failedIds.length > 0 ? 'error' : 'success',
+            message: failedIds.length > 0
+                ? `${customerOrders.length - failedIds.length} orders deleted. ${failedIds.length} could not be deleted.`
+                : `Deleted all ${customerOrders.length} orders for ${customerLabel}.`
+        })
     }
 
     const handleDeleteOrder = async (order) => {
@@ -593,16 +764,6 @@ const Orders = () => {
         }
     }
 
-    const handleToggleOrder = (order, isExpanded) => {
-        if (isExpanded) {
-            setExpandedOrder(null)
-            return
-        }
-
-        setExpandedOrder(order.id)
-        hydrateLatestQuoteRevision(order)
-    }
-
     const buildQuotePreview = (order, basket, customizations, summary) => {
         const orderId = String(order.id)
         const lines = []
@@ -814,6 +975,11 @@ const Orders = () => {
             }
             return 0
         })
+    const detailOrders = isDetailPage
+        ? sortedOrders.filter((order) => (
+            String(order.id) === String(orderId) || String(order.quote_id) === String(orderId)
+        ))
+        : []
 
     const stats = {
         total: orders.length,
@@ -834,7 +1000,7 @@ const Orders = () => {
     }
 
     return (
-        <div className="max-w-7xl mx-auto space-y-8 pb-12">
+        <div className={`${isDetailPage ? 'max-w-7xl space-y-8' : 'max-w-[1500px] space-y-5'} mx-auto pb-12`}>
             {quoteActionMessage && (
                 <div className="fixed bottom-8 right-8 z-[120] w-[360px] rounded-2xl border border-slate-200 bg-white p-4 shadow-2xl shadow-slate-900/15">
                     <div className="flex items-start gap-3">
@@ -856,54 +1022,73 @@ const Orders = () => {
             )}
 
             {/* Header Area */}
-            <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-                <div>
-                    <h1 className="text-4xl font-black text-slate-900 tracking-tight">Quote Requests</h1>
-                    <p className="text-slate-500 font-medium mt-1">Review requests, adjust quote pricing, and prepare customer-ready quotes.</p>
-                </div>
+            <div className={`flex flex-col md:flex-row justify-between ${isDetailPage ? 'md:items-end gap-6' : 'md:items-center gap-4'}`}>
+                {isDetailPage ? (
+                    <div className="flex items-center gap-4">
+                        <button
+                            onClick={() => navigate('/')}
+                            className="w-11 h-11 rounded-xl bg-white border border-slate-200 text-slate-600 hover:text-primary hover:border-primary/40 flex items-center justify-center shadow-sm transition-all"
+                            title="Back to orders"
+                        >
+                            <ArrowLeft className="w-5 h-5" />
+                        </button>
+                        <div>
+                            <div className="text-[10px] font-black text-slate-400 uppercase tracking-[0.18em]">Order Detail</div>
+                            <h1 className="text-3xl font-black text-slate-900 tracking-tight mt-1">{orderId}</h1>
+                        </div>
+                    </div>
+                ) : (
+                    <>
+                        <div>
+                            <h1 className="text-3xl font-black text-slate-900 tracking-tight">Quote Requests</h1>
+                            <p className="text-sm text-slate-500 font-medium mt-1">Review and manage customer quote requests.</p>
+                        </div>
 
-                {/* Status Tabs */}
-                <div className="flex p-1 bg-white border border-slate-200 rounded-xl shadow-sm overflow-x-auto">
-                    <button
-                        onClick={() => setStatusFilter('all')}
-                        className={`px-4 py-2 text-xs font-bold rounded-lg transition-all uppercase tracking-wider whitespace-nowrap
-                            ${statusFilter === 'all'
-                                ? 'bg-slate-900 text-white shadow-md'
-                                : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50'
-                            }`}
-                    >
-                        All
-                    </button>
-                    {WORKFLOW_STATUSES.map((ws) => {
-                        const style = statusFilter === ws.key
-                            ? { backgroundColor: ws.bg, color: ws.text, borderColor: ws.border }
-                            : {}
-                        return (
+                        <div className="flex p-1 bg-white border border-slate-200 rounded-lg shadow-sm overflow-x-auto max-w-full">
                             <button
-                                key={ws.key}
-                                onClick={() => setStatusFilter(ws.key)}
-                                style={style}
-                                className={`px-4 py-2 text-xs font-bold rounded-lg transition-all uppercase tracking-wider whitespace-nowrap border
-                                    ${statusFilter === ws.key
-                                        ? 'shadow-md border-transparent'
-                                        : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50 border-transparent'
+                                onClick={() => setStatusFilter('all')}
+                                className={`px-3 py-1.5 text-[11px] font-bold rounded-md transition-all uppercase tracking-wider whitespace-nowrap
+                                    ${statusFilter === 'all'
+                                        ? 'bg-slate-900 text-white shadow-md'
+                                        : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50'
                                     }`}
                             >
-                                {ws.label}
+                                All
                             </button>
-                        )
-                    })}
-                </div>
+                            {WORKFLOW_STATUSES.map((ws) => {
+                                const style = statusFilter === ws.key
+                                    ? { backgroundColor: ws.bg, color: ws.text, borderColor: ws.border }
+                                    : {}
+                                return (
+                                    <button
+                                        key={ws.key}
+                                        onClick={() => setStatusFilter(ws.key)}
+                                        style={style}
+                                        className={`px-3 py-1.5 text-[11px] font-bold rounded-md transition-all uppercase tracking-wider whitespace-nowrap border
+                                            ${statusFilter === ws.key
+                                                ? 'shadow-md border-transparent'
+                                                : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50 border-transparent'
+                                            }`}
+                                    >
+                                        {ws.label}
+                                    </button>
+                                )
+                            })}
+                        </div>
+                    </>
+                )}
             </div>
 
+            {!isDetailPage && (
+                <>
             {/* Filters & Search Row */}
-            <div className="flex flex-col lg:flex-row lg:items-center gap-6">
-                <div className="relative flex-1 flex items-center gap-3">
+            <div className="flex flex-col xl:flex-row xl:items-center gap-3">
+                <div className="relative flex-1 flex items-center gap-2">
                     {/* Select All Checkbox */}
                     {sortedOrders.length > 0 && (
                         <button
                             onClick={toggleSelectAll}
-                            className={`w-10 h-10 shrink-0 rounded-xl border-2 flex items-center justify-center transition-all
+                            className={`w-8 h-8 shrink-0 rounded-lg border-2 flex items-center justify-center transition-all
                                 ${selectedOrders.size === sortedOrders.length && sortedOrders.length > 0
                                     ? 'bg-primary border-primary text-white'
                                     : selectedOrders.size > 0
@@ -922,22 +1107,22 @@ const Orders = () => {
                         </button>
                     )}
                     <div className="relative flex-1">
-                        <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-400" />
+                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
                     <input
                         type="text"
                         placeholder="Search by ID, Name or Email..."
-                        className="w-full pl-12 pr-4 py-4 bg-white border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all shadow-sm font-semibold text-slate-700"
+                        className="w-full pl-9 pr-3 py-2.5 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all shadow-sm text-sm font-semibold text-slate-700"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                     />
                     </div>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-6">
+                <div className="flex flex-wrap items-center gap-3">
                     {/* Sort Controls */}
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2">
                         <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Sort By:</span>
-                        <div className="flex gap-2">
+                        <div className="flex gap-1.5">
                             <button
                                 onClick={() => {
                                     if (sortBy === 'date') {
@@ -947,7 +1132,7 @@ const Orders = () => {
                                         setSortOrder('desc')
                                     }
                                 }}
-                                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border text-xs font-bold transition-all
+                                className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-bold transition-all
                                     ${sortBy === 'date'
                                         ? 'bg-primary text-white border-primary shadow-lg shadow-primary/20'
                                         : 'bg-white text-slate-600 border-slate-200 hover:border-primary/50'
@@ -969,7 +1154,7 @@ const Orders = () => {
                                         setSortOrder('desc')
                                     }
                                 }}
-                                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border text-xs font-bold transition-all
+                                className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-bold transition-all
                                     ${sortBy === 'price'
                                         ? 'bg-primary text-white border-primary shadow-lg shadow-primary/20'
                                         : 'bg-white text-slate-600 border-slate-200 hover:border-primary/50'
@@ -985,23 +1170,23 @@ const Orders = () => {
                     </div>
 
                     {/* Quick Stats - Mini Cards */}
-                    <div className="flex gap-4">
-                        <div className="px-6 py-3 bg-white rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3 min-w-[140px]">
-                            <div className="w-10 h-10 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
-                                <Clock className="w-5 h-5" />
+                    <div className="flex gap-2">
+                        <div className="px-3 py-2 bg-white rounded-lg border border-slate-200 shadow-sm flex items-center gap-2 min-w-[100px]">
+                            <div className="w-7 h-7 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+                                <Clock className="w-4 h-4" />
                             </div>
                             <div>
                                 <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Pending</div>
-                                <div className="text-lg font-black text-slate-800">{orders.filter(o => o.status === 'Pending').length}</div>
+                                <div className="text-sm font-black text-slate-800">{orders.filter(o => o.status === 'Pending').length}</div>
                             </div>
                         </div>
-                        <div className="px-6 py-3 bg-white rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3 min-w-[140px]">
-                            <div className="w-10 h-10 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
-                                <PoundSterling className="w-5 h-5" />
+                        <div className="px-3 py-2 bg-white rounded-lg border border-slate-200 shadow-sm flex items-center gap-2 min-w-[115px]">
+                            <div className="w-7 h-7 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                                <PoundSterling className="w-4 h-4" />
                             </div>
                             <div>
                                 <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Value</div>
-                                <div className="text-lg font-black text-slate-800">
+                                <div className="text-sm font-black text-slate-800">
                                     £{orders.reduce((acc, curr) => {
                                         const { basket, customizations, summary } = parseQuoteData(curr)
                                         const preview = buildQuotePreview(curr, basket, customizations, summary)
@@ -1040,24 +1225,169 @@ const Orders = () => {
                     </div>
                 </div>
             )}
+                </>
+            )}
 
             {/* Orders List */}
             <div className="space-y-4">
-                {sortedOrders.length === 0 ? (
-                    <div className="bg-white rounded-3xl border border-slate-200 p-16 text-center">
-                        <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-6">
-                            <ShoppingCart className="w-10 h-10 text-slate-300" />
+                {!isDetailPage ? (
+                    sortedOrders.length === 0 ? (
+                        <div className="bg-white rounded-3xl border border-slate-200 p-16 text-center">
+                            <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-6">
+                                <ShoppingCart className="w-10 h-10 text-slate-300" />
+                            </div>
+                            <h3 className="text-xl font-black text-slate-800 mb-2">No Requests Found</h3>
+                            <p className="text-slate-500 max-w-md mx-auto">
+                                Try adjusting your search terms or filters to find what you're looking for.
+                            </p>
                         </div>
-                        <h3 className="text-xl font-black text-slate-800 mb-2">No Requests Found</h3>
-                        <p className="text-slate-500 max-w-md mx-auto">
-                            Try adjusting your search terms or filters to find what you're looking for.
-                        </p>
+                    ) : (
+                        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                            <div className="overflow-x-auto">
+                                <table className="w-full min-w-[1080px]">
+                                    <thead>
+                                        <tr className="bg-slate-50 border-b border-slate-200">
+                                            <th className="w-12 px-3 py-3 text-left">
+                                                <button
+                                                    onClick={toggleSelectAll}
+                                                    className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all ${
+                                                        selectedOrders.size === sortedOrders.length
+                                                            ? 'bg-primary border-primary text-white'
+                                                            : 'bg-white border-slate-300 text-transparent'
+                                                    }`}
+                                                    title="Select all"
+                                                >
+                                                    <CheckCircle className="w-3.5 h-3.5" />
+                                                </button>
+                                            </th>
+                                            {['Quote', 'Customer', 'Company', 'Products', 'Date', 'Status', 'Total', ''].map((heading) => (
+                                                <th key={heading || 'action'} className="px-3 py-3 text-left text-[10px] font-black text-slate-400 uppercase tracking-[0.12em]">
+                                                    {heading}
+                                                </th>
+                                            ))}
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                        {sortedOrders.map((order) => {
+                                            const { basket, customizations, summary } = parseQuoteData(order)
+                                            const quotePreview = buildQuotePreview(order, basket, customizations, summary)
+                                            const displayTotal = quotePreview.totalIncVat || parseFloat(order.total_amount) || summary.totalIncVat || 0
+                                            const statusStyle = getStatusStyle(order.status)
+                                            const quantity = basket.reduce((total, item) => total + getBasketQuantity(item), 0)
+                                            const productNames = basket.map((item) => item.name || item.code).filter(Boolean)
+                                            const primaryProductName = productNames[0] || 'No product details'
+                                            const additionalProductCount = Math.max(0, productNames.length - 1)
+                                            const customerKey = getCustomerKey(order)
+                                            const customerOrderCount = orders.filter((item) => getCustomerKey(item) === customerKey).length
+                                            const isDeletingCustomer = deletingCustomerKey === customerKey
+
+                                            return (
+                                                <tr
+                                                    key={order.id}
+                                                    onClick={() => navigate(`/orders/${encodeURIComponent(order.quote_id || order.id)}`)}
+                                                    className="group cursor-pointer hover:bg-primary/[0.025] transition-colors"
+                                                >
+                                                    <td className="px-3 py-3">
+                                                        <button
+                                                            onClick={(event) => {
+                                                                event.stopPropagation()
+                                                                toggleSelectOrder(order.id)
+                                                            }}
+                                                            className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all ${
+                                                                selectedOrders.has(order.id)
+                                                                    ? 'bg-primary border-primary text-white'
+                                                                    : 'bg-white border-slate-300 text-transparent group-hover:border-primary/50'
+                                                            }`}
+                                                        >
+                                                            <CheckCircle className="w-3.5 h-3.5" />
+                                                        </button>
+                                                    </td>
+                                                    <td className="px-3 py-3">
+                                                        <div className="font-mono text-[11px] font-black text-slate-800 max-w-[180px] truncate">{order.quote_id}</div>
+                                                        <div className="text-[9px] font-bold text-slate-400 mt-0.5">#{order.id}</div>
+                                                    </td>
+                                                    <td className="px-3 py-3">
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="w-7 h-7 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center font-black text-[10px]">
+                                                                {order.customer_name?.charAt(0) || '?'}
+                                                            </div>
+                                                            <div className="min-w-0">
+                                                                <div className="text-xs font-black text-slate-900">{order.customer_name || 'Unknown customer'}</div>
+                                                                <div className="text-[10px] font-medium text-slate-400 max-w-[190px] truncate">{order.customer_email}</div>
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-3 py-3 text-xs font-bold text-slate-600 max-w-[160px] truncate">{order.customer_company || '—'}</td>
+                                                    <td className="px-3 py-3 max-w-[230px]">
+                                                        <div className="text-xs font-black text-slate-800 truncate" title={productNames.join(', ')}>{primaryProductName}</div>
+                                                        <div className="text-[10px] font-bold text-slate-400 mt-0.5">
+                                                            Qty {quantity || basket.length}
+                                                            {additionalProductCount > 0 ? ` · +${additionalProductCount} more product${additionalProductCount === 1 ? '' : 's'}` : ''}
+                                                            {customizations.length > 0 ? ` · ${customizations.length} design` : ''}
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-3 py-3">
+                                                        <div className="text-xs font-bold text-slate-700">{new Date(order.created_at).toLocaleDateString()}</div>
+                                                        <div className="text-[9px] font-bold text-slate-400 mt-0.5">{new Date(order.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                                                    </td>
+                                                    <td className="px-3 py-3">
+                                                        <span
+                                                            className="inline-flex px-2 py-1 rounded-md border text-[9px] font-black uppercase tracking-wider"
+                                                            style={{ backgroundColor: statusStyle.bg, color: statusStyle.text, borderColor: statusStyle.border }}
+                                                        >
+                                                            {statusStyle.label}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-3 py-3">
+                                                        <div className="text-sm font-black text-slate-900">{formatMoney(displayTotal)}</div>
+                                                        {quotePreview.hasChanges && <div className="text-[9px] font-black text-emerald-600 uppercase mt-0.5">Adjusted</div>}
+                                                    </td>
+                                                    <td className="px-3 py-3 text-right">
+                                                        <div className="flex items-center justify-end gap-1.5">
+                                                            <button
+                                                                onClick={(event) => {
+                                                                    event.stopPropagation()
+                                                                    handleDeleteCustomerOrders(order)
+                                                                }}
+                                                                disabled={isDeletingCustomer}
+                                                                title={`Delete all ${customerOrderCount} order${customerOrderCount === 1 ? '' : 's'} for this customer`}
+                                                                className="inline-flex items-center justify-center w-7 h-7 rounded-md bg-rose-50 text-rose-500 hover:bg-rose-500 hover:text-white transition-all disabled:opacity-50"
+                                                            >
+                                                                {isDeletingCustomer ? (
+                                                                    <div className="w-3 h-3 border-2 border-rose-300 border-t-rose-600 rounded-full animate-spin" />
+                                                                ) : (
+                                                                    <UserX className="w-3.5 h-3.5" />
+                                                                )}
+                                                            </button>
+                                                            <button
+                                                                onClick={(event) => {
+                                                                    event.stopPropagation()
+                                                                    navigate(`/orders/${encodeURIComponent(order.quote_id || order.id)}`)
+                                                                }}
+                                                                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-slate-100 text-slate-600 group-hover:bg-primary group-hover:text-white text-[10px] font-black transition-all"
+                                                            >
+                                                                <Eye className="w-3.5 h-3.5" />
+                                                                View
+                                                                <ChevronRight className="w-3.5 h-3.5" />
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            )
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )
+                ) : detailOrders.length === 0 ? (
+                    <div className="bg-white rounded-3xl border border-slate-200 p-16 text-center">
+                        <h3 className="text-xl font-black text-slate-800 mb-2">Order not found</h3>
+                        <p className="text-slate-500">This order may have been removed or the link is incorrect.</p>
                     </div>
                 ) : (
-                    sortedOrders.map((order) => {
-                        const status = statusConfig[order.status] || statusConfig['Pending']
-                        const StatusIcon = status.icon
-                        const isExpanded = expandedOrder === order.id
+                    detailOrders.map((order) => {
+                        const isExpanded = true
                         const { basket, customizations, summary, logos } = parseQuoteData(order)
                         const quotePreview = buildQuotePreview(order, basket, customizations, summary)
                         const displayTotal = quotePreview.totalIncVat || parseFloat(order.total_amount) || summary.totalIncVat || 0
@@ -1066,14 +1396,11 @@ const Orders = () => {
                             <div
                                 key={order.id}
                                 id={`invoice-content-${order.id}`}
-                                className={`bg-white rounded-2xl border transition-all duration-300 overflow-hidden group
+                                className={`quote-print-shell bg-white rounded-2xl border transition-all duration-300 overflow-hidden group
                                     ${isExpanded ? 'border-primary shadow-xl shadow-primary/5 ring-1 ring-primary/5' : 'border-slate-200 hover:border-primary/50'}`}
                             >
                                 {/* Main Order Row */}
-                                <div
-                                    className="p-6 cursor-pointer"
-                                    onClick={() => handleToggleOrder(order, isExpanded)}
-                                >
+                                <div data-html2canvas-ignore="true" className="p-6">
                                     <div className="flex flex-col lg:flex-row lg:items-center gap-6">
 
                                         {/* Checkbox */}
@@ -1092,13 +1419,6 @@ const Orders = () => {
                                         {/* Status Badge */}
                                         <div className="flex items-center justify-between lg:w-48 shrink-0">
                                             <div className="flex items-center gap-4">
-                                                <button
-                                                    data-html2canvas-ignore="true"
-                                                    className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors 
-                                                        ${isExpanded ? 'bg-primary text-white' : 'bg-slate-100 text-slate-400 group-hover:bg-primary/10 group-hover:text-primary'}`}
-                                                >
-                                                    {isExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
-                                                </button>
                                                 <div>
                                                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Status</span>
                                                     <WorkflowDropdown
@@ -1159,7 +1479,7 @@ const Orders = () => {
                                 {/* Expanded Content */}
                                 {isExpanded && (
                                     <div className="border-t border-slate-100 bg-slate-50/50">
-                                        <div className="p-8">
+                                        <div className="quote-print-content p-8">
                                             {/* Action Bar */}
                                             <div data-html2canvas-ignore="true" className="flex flex-wrap items-center justify-between gap-4 mb-8 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
                                                 <div className="flex items-center gap-3">
@@ -1239,10 +1559,10 @@ const Orders = () => {
                                                 </div>
                                             </div>
 
-                                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 p-1 sm:p-2 bg-slate-50">
+                                            <div className="quote-print-layout grid grid-cols-1 lg:grid-cols-3 gap-8 p-1 sm:p-2 bg-slate-50">
                                                 {/* Left Column: Customer & Details */}
-                                                <div className="space-y-6">
-                                                    <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+                                                <div className="quote-print-sidebar space-y-6">
+                                                    <div className="quote-print-card bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
                                                         <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
                                                             <User className="w-4 h-4 text-primary" /> Customer Details
                                                         </h4>
@@ -1270,7 +1590,7 @@ const Orders = () => {
 
                                                     {/* Customization Summary */}
                                                     {customizations.length > 0 && (
-                                                        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+                                                        <div className="quote-print-card bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
                                                             <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
                                                                 <Edit3 className="w-4 h-4 text-primary" /> Design Requests
                                                             </h4>
@@ -1406,7 +1726,7 @@ const Orders = () => {
                                                         if (allLogos.length === 0) return null
 
                                                         return (
-                                                            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+                                                            <div className="quote-print-card bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
                                                                 <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
                                                                     <ImageIcon className="w-4 h-4 text-primary" /> Uploaded Logos ({allLogos.length})
                                                                 </h4>
@@ -1414,7 +1734,7 @@ const Orders = () => {
                                                                     {allLogos.map((logo, idx) => (
                                                                         <div key={idx} className="bg-slate-50 rounded-2xl border border-slate-200 overflow-hidden">
                                                                             <div className="p-2">
-                                                                                <div className="w-full h-40 bg-white rounded-xl border border-slate-100 flex items-center justify-center overflow-hidden relative">
+                                                                                <div className="quote-print-logo-preview w-full h-40 bg-white rounded-xl border border-slate-100 flex items-center justify-center overflow-hidden relative">
                                                                                     <div className="absolute inset-0 opacity-5 pointer-events-none"
                                                                                         style={{ backgroundImage: 'linear-gradient(45deg, #666 25%, transparent 25%), linear-gradient(-45deg, #666 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #666 75%), linear-gradient(-45deg, transparent 75%, #666 75%)', backgroundSize: '8px 8px', backgroundPosition: '0 0, 0 4px, 4px -4px, -4px 0px' }}>
                                                                                     </div>
@@ -1481,10 +1801,10 @@ const Orders = () => {
                                                 </div>
 
                                                 {/* Right Column: Cost Breakdown & Order Items */}
-                                                <div className="lg:col-span-2 space-y-8">
+                                                <div className="quote-print-main lg:col-span-2 space-y-8">
                                                     
                                                     {/* Cost Breakdown Section (Inspired by App Design) */}
-                                                    <div className="bg-white rounded-[24px] border-2 border-primary/20 shadow-md p-6 lg:p-8">
+                                                    <div className="quote-print-cost bg-white rounded-[24px] border-2 border-primary/20 shadow-md p-6 lg:p-8">
                                                         <h4 className="text-xl font-black text-slate-900 mb-6 flex items-center gap-2">
                                                             Cost Breakdown
                                                         </h4>
@@ -1568,7 +1888,7 @@ const Orders = () => {
                                                         </div>
                                                     </div>
 
-                                                    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                                                    <div className="quote-print-items bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                                                         <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
                                                             <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
                                                                 <Package className="w-4 h-4 text-primary" /> Order Items ({basket.length})

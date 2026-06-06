@@ -175,7 +175,7 @@ const Layout = ({ children, onLogout }) => {
 
   const isActive = (path) => {
     if (!path) return false
-    if (path === '/') return location.pathname === '/' || location.pathname === '/orders'
+    if (path === '/') return location.pathname === '/' || location.pathname === '/orders' || location.pathname.startsWith('/orders/')
     if (path.includes('ignore')) return false
     return location.pathname === path || location.pathname.startsWith(path + '/')
   }
