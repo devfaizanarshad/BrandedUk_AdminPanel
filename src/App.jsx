@@ -36,7 +36,6 @@ function App() {
   const handleLogin = (userData) => {
     setUser(userData)
     localStorage.setItem('admin_user', JSON.stringify(userData))
-    window.location.href = '/'
   }
 
   const handleLogout = () => {
