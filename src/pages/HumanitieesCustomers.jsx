@@ -640,7 +640,7 @@ const HumanitieesCustomers = () => {
                       </td>
 
                       {/* Humanity Number */}
-                      <td className="px-4 py-2 font-mono font-medium text-[#111827]">
+                      <td className="px-4 py-2 font-mono font-medium text-[#111827] whitespace-nowrap">
                         <div className="flex items-center gap-1.5">
                           <span>{formatHumanityNumber(num)}</span>
                           <button
