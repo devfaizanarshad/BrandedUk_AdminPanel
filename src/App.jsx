@@ -17,6 +17,7 @@ import System from './pages/System'
 import MarkupOverrides from './pages/MarkupOverrides'
 import PriceOverrides from './pages/PriceOverrides'
 import HumanitieesProducts from './pages/HumanitieesProducts'
+import HumanitieesCustomers from './pages/HumanitieesCustomers'
 
 import { useState, useEffect } from 'react'
 import Login from './pages/Login'
@@ -72,6 +73,7 @@ function App() {
           <Route path="/markup-overrides" element={<MarkupOverrides />} />
           <Route path="/price-overrides" element={<PriceOverrides />} />
           <Route path="/humanitiees-products" element={<HumanitieesProducts />} />
+          <Route path="/humanitiees-customers" element={<HumanitieesCustomers />} />
         </Routes>
       </Layout>
     </Router>

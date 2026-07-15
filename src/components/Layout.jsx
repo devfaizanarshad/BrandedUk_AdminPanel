@@ -166,6 +166,7 @@ const Layout = ({ children, onLogout }) => {
       title: 'Operations',
       items: [
         { name: 'Customers', path: '/customers', icon: Users },
+        { name: 'Humanity Customers', path: '/humanitiees-customers', icon: Users },
         { name: 'Brands', path: '/brands', icon: Building2 },
         { name: 'Customization', path: '/customization', icon: Palette },
         { name: 'System', path: '/system', icon: Settings },
