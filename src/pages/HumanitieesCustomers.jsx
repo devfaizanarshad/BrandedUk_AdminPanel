@@ -363,7 +363,7 @@ const HumanitieesCustomers = () => {
   )
 
   return (
-    <div className="min-h-screen bg-[#F7F8FA] px-6 py-6 font-sans text-[#111827]">
+    <div className="w-full pb-12 font-sans text-[#111827]">
       {/* 1. Page Header */}
       <div className="flex items-center justify-between border-b border-[#E5E7EB] pb-4 mb-5">
         <div>
@@ -402,9 +402,9 @@ const HumanitieesCustomers = () => {
       </div>
 
       {/* 3. Search and Filters Toolbar */}
-      <div className="bg-white border border-[#E5E7EB] rounded-lg p-3 mb-4 flex flex-col md:flex-row md:items-center justify-between gap-3">
+      <div className="bg-white border border-[#E5E7EB] rounded-lg p-3 mb-4 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
         {/* Search */}
-        <div className="relative w-full md:w-[420px]">
+        <div className="relative w-full lg:w-[320px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#94A3B8] pointer-events-none" />
           <input
             type="text"
