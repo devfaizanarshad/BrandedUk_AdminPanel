@@ -16,6 +16,14 @@ const PRODUCT_TYPES_API = `${API_BASE}/api/filters/product-types`
 const TEMPLATE_API = `${API_BASE}/api/admin/customization/templates`
 const IMAGE_UPLOAD_API = `${API_BASE}/api/admin/customization-config/upload-image`
 
+const BAG_VARIANTS = [
+    { key: '', label: 'Generic fallback' },
+    { key: 'tote', label: 'Tote / shopper' },
+    { key: 'backpack', label: 'Backpack / rucksack' },
+    { key: 'holdall', label: 'Holdall / duffel' },
+    { key: 'laptop-document', label: 'Laptop / document bag' }
+]
+
 const methodPriceValue = (value) => value === null || value === undefined ? '' : String(value)
 
 const slugify = (value) => String(value || '')
@@ -154,6 +162,7 @@ const snapshotTemplate = (template) => JSON.stringify({
 const CustomizationConfig = () => {
     const [productTypes, setProductTypes] = useState([])
     const [selectedTypeSlug, setSelectedTypeSlug] = useState(null)
+    const [selectedSubtypeKey, setSelectedSubtypeKey] = useState('')
     const [template, setTemplate] = useState(null)
     const [loading, setLoading] = useState(true)
     const [loadingTemplate, setLoadingTemplate] = useState(false)
@@ -201,7 +210,7 @@ const CustomizationConfig = () => {
 
         window.addEventListener('keydown', handleKeyDown)
         return () => window.removeEventListener('keydown', handleKeyDown)
-    }, [saving, hasUnsavedChanges, selectedTypeSlug])
+    }, [saving, hasUnsavedChanges, selectedTypeSlug, selectedSubtypeKey])
 
     useEffect(() => {
         const handleBeforeUnload = (event) => {
@@ -216,9 +225,12 @@ const CustomizationConfig = () => {
 
     useEffect(() => {
         if (selectedTypeSlug && productTypes.length > 0) {
-            fetchTemplate(selectedTypeSlug)
+            fetchTemplate(
+                selectedTypeSlug,
+                selectedTypeSlug === 'bags' ? selectedSubtypeKey : ''
+            )
         }
-    }, [selectedTypeSlug, productTypes])
+    }, [selectedTypeSlug, selectedSubtypeKey, productTypes])
 
     const fetchProductTypes = async () => {
         try {
@@ -240,12 +252,14 @@ const CustomizationConfig = () => {
         }
     }
 
-    const fetchTemplate = async (slug) => {
+    const fetchTemplate = async (slug, subtypeKey = '') => {
         const fallbackType = productTypes.find(type => type.slug === slug)
         try {
             setLoadingTemplate(true)
             setStatusMessage(null)
-            const response = await fetch(`${TEMPLATE_API}/${encodeURIComponent(slug)}`)
+            const templateUrl = new URL(`${TEMPLATE_API}/${encodeURIComponent(slug)}`)
+            if (subtypeKey) templateUrl.searchParams.set('subtype', subtypeKey)
+            const response = await fetch(templateUrl.toString())
             if (response.status === 404) {
                 const blankTemplate = createBlankTemplate(fallbackType)
                 setTemplate(blankTemplate)
@@ -341,12 +355,16 @@ const CustomizationConfig = () => {
         try {
             setSaving(true)
             setStatusMessage(null)
-            const response = await fetch(`${TEMPLATE_API}/${encodeURIComponent(selectedTypeSlug)}`, {
+            const subtypeKey = selectedTypeSlug === 'bags' ? selectedSubtypeKey : ''
+            const templateUrl = new URL(`${TEMPLATE_API}/${encodeURIComponent(selectedTypeSlug)}`)
+            if (subtypeKey) templateUrl.searchParams.set('subtype', subtypeKey)
+            const response = await fetch(templateUrl.toString(), {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     name: template.name,
                     product_type: selectedTypeSlug,
+                    subtypeKey,
                     status: template.status,
                     version: template.version,
                     positions: normalizePositionsForSave(template.positions)
@@ -369,11 +387,18 @@ const CustomizationConfig = () => {
     }
 
     const handleDeleteTemplate = async () => {
-        if (!selectedTypeSlug || !window.confirm(`Delete customization config for ${selectedType?.name || selectedTypeSlug}?`)) return
+        const subtypeKey = selectedTypeSlug === 'bags' ? selectedSubtypeKey : ''
+        const subtypeLabel = BAG_VARIANTS.find(variant => variant.key === subtypeKey)?.label
+        const configLabel = subtypeKey
+            ? `${selectedType?.name || selectedTypeSlug} — ${subtypeLabel || subtypeKey}`
+            : selectedType?.name || selectedTypeSlug
+        if (!selectedTypeSlug || !window.confirm(`Delete customization config for ${configLabel}?`)) return
         try {
             setSaving(true)
             setStatusMessage(null)
-            const response = await fetch(`${TEMPLATE_API}/${encodeURIComponent(selectedTypeSlug)}`, {
+            const templateUrl = new URL(`${TEMPLATE_API}/${encodeURIComponent(selectedTypeSlug)}`)
+            if (subtypeKey) templateUrl.searchParams.set('subtype', subtypeKey)
+            const response = await fetch(templateUrl.toString(), {
                 method: 'DELETE'
             })
             if (!response.ok) throw new Error(`Failed to delete config (${response.status})`)
@@ -402,6 +427,7 @@ const CustomizationConfig = () => {
             formData.append('image', file)
             formData.append('product_type', selectedTypeSlug || '')
             formData.append('productType', selectedTypeSlug || '')
+            formData.append('subtypeKey', selectedTypeSlug === 'bags' ? selectedSubtypeKey : '')
             formData.append('position_code', position.code || '')
             formData.append('positionCode', position.code || '')
             formData.append('code', position.code || '')
@@ -495,6 +521,7 @@ const CustomizationConfig = () => {
                                         if (type.slug === selectedTypeSlug) return
                                         const proceed = await requestDiscardOrSave()
                                         if (proceed) {
+                                            setSelectedSubtypeKey('')
                                             setSelectedTypeSlug(type.slug)
                                         }
                                     }}
@@ -524,6 +551,29 @@ const CustomizationConfig = () => {
                                 <div className="flex items-start justify-between gap-4">
                                     <div>
                                         <h2 className="text-xl font-semibold text-gray-900">{selectedType?.name || template.name}</h2>
+                                        {selectedTypeSlug === 'bags' && (
+                                            <label className="block mt-4 mb-3">
+                                                <span className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                                                    Bag silhouette
+                                                </span>
+                                                <select
+                                                    value={selectedSubtypeKey}
+                                                    onChange={async (event) => {
+                                                        const nextSubtypeKey = event.target.value
+                                                        if (nextSubtypeKey === selectedSubtypeKey) return
+                                                        const proceed = await requestDiscardOrSave()
+                                                        if (proceed) setSelectedSubtypeKey(nextSubtypeKey)
+                                                    }}
+                                                    className="min-w-64 px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-primary"
+                                                >
+                                                    {BAG_VARIANTS.map(variant => (
+                                                        <option key={variant.key || 'generic'} value={variant.key}>
+                                                            {variant.label}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            </label>
+                                        )}
                                         <p className="text-sm text-gray-500 mt-1">
                                             Slug: {selectedTypeSlug} · Version: {template.version} · {template.positions?.length || 0} positions
                                         </p>
