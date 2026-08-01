@@ -16,13 +16,33 @@ const PRODUCT_TYPES_API = `${API_BASE}/api/filters/product-types`
 const TEMPLATE_API = `${API_BASE}/api/admin/customization/templates`
 const IMAGE_UPLOAD_API = `${API_BASE}/api/admin/customization-config/upload-image`
 
-const BAG_VARIANTS = [
-    { key: '', label: 'Generic fallback' },
-    { key: 'tote', label: 'Tote / shopper' },
-    { key: 'backpack', label: 'Backpack / rucksack' },
-    { key: 'holdall', label: 'Holdall / duffel' },
-    { key: 'laptop-document', label: 'Laptop / document bag' }
-]
+const GENERIC_SUBTYPE = { key: '', label: 'Generic fallback' }
+const CUSTOMIZATION_SUBTYPES = {
+    aprons: [{ key: 'bib', label: 'Bib apron' }, { key: 'waist', label: 'Waist apron' }],
+    bags: [
+        { key: 'tote', label: 'Tote / shopper' },
+        { key: 'backpack', label: 'Backpack / rucksack' },
+        { key: 'holdall', label: 'Holdall / duffel' },
+        { key: 'laptop-document', label: 'Laptop / document bag' }
+    ],
+    beanies: [{ key: 'cuffed', label: 'Cuffed beanie' }, { key: 'bobble', label: 'Bobble beanie' }],
+    fleece: [{ key: 'full-zip', label: 'Full zip fleece' }, { key: 'quarter-zip', label: 'Quarter zip fleece' }],
+    'gilets-body-warmers': [{ key: 'padded', label: 'Padded gilet' }, { key: 'fleece', label: 'Fleece gilet' }],
+    hats: [{ key: 'bucket', label: 'Bucket hat' }, { key: 'wide-brim', label: 'Wide-brim hat' }],
+    'safety-vests': [{ key: 'waistcoat', label: 'Hi-vis waistcoat' }, { key: 'jacket-bomber', label: 'Hi-vis jacket / bomber' }],
+    hoodies: [{ key: 'pullover', label: 'Pullover hoodie' }, { key: 'full-zip', label: 'Full zip hoodie' }],
+    jackets: [
+        { key: 'lightweight', label: 'Lightweight jacket' },
+        { key: 'padded-puffer', label: 'Padded / puffer jacket' },
+        { key: 'waterproof-parka', label: 'Waterproof / parka' }
+    ],
+    polos: [{ key: 'short-sleeve', label: 'Short-sleeve polo' }, { key: 'long-sleeve', label: 'Long-sleeve polo' }],
+    shirts: [{ key: 'short-sleeve', label: 'Short-sleeve shirt' }, { key: 'long-sleeve', label: 'Long-sleeve shirt' }],
+    shorts: [{ key: 'sports', label: 'Sports shorts' }, { key: 'cargo-workwear', label: 'Cargo / workwear shorts' }],
+    sweatshirts: [{ key: 'crewneck', label: 'Crewneck sweatshirt' }, { key: 'quarter-zip', label: 'Quarter zip sweatshirt' }],
+    tshirts: [{ key: 'short-sleeve', label: 'Short-sleeve T-shirt' }, { key: 'long-sleeve', label: 'Long-sleeve T-shirt' }],
+    'vests-t-shirt': [{ key: 'standard', label: 'Standard vest' }, { key: 'racerback', label: 'Racerback vest' }]
+}
 
 const methodPriceValue = (value) => value === null || value === undefined ? '' : String(value)
 
@@ -185,6 +205,11 @@ const CustomizationConfig = () => {
         () => productTypes.find(type => type.slug === selectedTypeSlug) || null,
         [productTypes, selectedTypeSlug]
     )
+    const selectedSubtypeOptions = useMemo(
+        () => CUSTOMIZATION_SUBTYPES[selectedTypeSlug] || [],
+        [selectedTypeSlug]
+    )
+    const activeSubtypeKey = selectedSubtypeOptions.length > 0 ? selectedSubtypeKey : ''
 
     const hasUnsavedChanges = useMemo(() => {
         if (!template) return false
@@ -227,10 +252,10 @@ const CustomizationConfig = () => {
         if (selectedTypeSlug && productTypes.length > 0) {
             fetchTemplate(
                 selectedTypeSlug,
-                selectedTypeSlug === 'bags' ? selectedSubtypeKey : ''
+                activeSubtypeKey
             )
         }
-    }, [selectedTypeSlug, selectedSubtypeKey, productTypes])
+    }, [selectedTypeSlug, activeSubtypeKey, productTypes])
 
     const fetchProductTypes = async () => {
         try {
@@ -355,7 +380,7 @@ const CustomizationConfig = () => {
         try {
             setSaving(true)
             setStatusMessage(null)
-            const subtypeKey = selectedTypeSlug === 'bags' ? selectedSubtypeKey : ''
+            const subtypeKey = activeSubtypeKey
             const templateUrl = new URL(`${TEMPLATE_API}/${encodeURIComponent(selectedTypeSlug)}`)
             if (subtypeKey) templateUrl.searchParams.set('subtype', subtypeKey)
             const response = await fetch(templateUrl.toString(), {
@@ -387,8 +412,8 @@ const CustomizationConfig = () => {
     }
 
     const handleDeleteTemplate = async () => {
-        const subtypeKey = selectedTypeSlug === 'bags' ? selectedSubtypeKey : ''
-        const subtypeLabel = BAG_VARIANTS.find(variant => variant.key === subtypeKey)?.label
+        const subtypeKey = activeSubtypeKey
+        const subtypeLabel = selectedSubtypeOptions.find(variant => variant.key === subtypeKey)?.label
         const configLabel = subtypeKey
             ? `${selectedType?.name || selectedTypeSlug} — ${subtypeLabel || subtypeKey}`
             : selectedType?.name || selectedTypeSlug
@@ -427,7 +452,7 @@ const CustomizationConfig = () => {
             formData.append('image', file)
             formData.append('product_type', selectedTypeSlug || '')
             formData.append('productType', selectedTypeSlug || '')
-            formData.append('subtypeKey', selectedTypeSlug === 'bags' ? selectedSubtypeKey : '')
+            formData.append('subtypeKey', activeSubtypeKey)
             formData.append('position_code', position.code || '')
             formData.append('positionCode', position.code || '')
             formData.append('code', position.code || '')
@@ -551,10 +576,10 @@ const CustomizationConfig = () => {
                                 <div className="flex items-start justify-between gap-4">
                                     <div>
                                         <h2 className="text-xl font-semibold text-gray-900">{selectedType?.name || template.name}</h2>
-                                        {selectedTypeSlug === 'bags' && (
+                                        {selectedSubtypeOptions.length > 0 && (
                                             <label className="block mt-4 mb-3">
                                                 <span className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-                                                    Bag silhouette
+                                                    Template subtype
                                                 </span>
                                                 <select
                                                     value={selectedSubtypeKey}
@@ -566,7 +591,7 @@ const CustomizationConfig = () => {
                                                     }}
                                                     className="min-w-64 px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-primary"
                                                 >
-                                                    {BAG_VARIANTS.map(variant => (
+                                                    {[GENERIC_SUBTYPE, ...selectedSubtypeOptions].map(variant => (
                                                         <option key={variant.key || 'generic'} value={variant.key}>
                                                             {variant.label}
                                                         </option>
