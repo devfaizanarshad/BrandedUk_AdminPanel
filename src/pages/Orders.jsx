@@ -242,6 +242,10 @@ const Orders = () => {
                                 display: none !important;
                             }
 
+                            .quote-print-final-price {
+                                display: block !important;
+                            }
+
                             .quote-print-shell {
                                 border: 0 !important;
                                 box-shadow: none !important;
@@ -1520,9 +1524,12 @@ const Orders = () => {
                                                     <div className="w-10 h-10 rounded-full bg-gradient-to-br from-slate-100 to-slate-200 border border-white shadow-sm flex items-center justify-center font-black text-slate-500 text-sm">
                                                         {order.customer_name?.charAt(0)}
                                                     </div>
-                                                    <div>
+                                                    <div className="min-w-0">
                                                         <div className="font-bold text-slate-900 leading-tight">{order.customer_name}</div>
                                                         <div className="text-xs text-slate-500 font-medium truncate max-w-[200px]">{order.customer_email}</div>
+                                                        <div className="text-xs text-slate-400 font-medium mt-0.5 flex items-center gap-1.5">
+                                                            <Phone className="w-3 h-3" /> {order.customer_phone || 'No phone provided'}
+                                                        </div>
                                                     </div>
                                                 </div>
                                             </div>
@@ -1555,16 +1562,7 @@ const Orders = () => {
                                     <div className="border-t border-slate-100 bg-slate-50/50">
                                         <div className="quote-print-content p-8">
                                             {/* Action Bar */}
-                                            <div data-html2canvas-ignore="true" className="flex flex-wrap items-center justify-between gap-4 mb-8 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-                                                <div className="flex items-center gap-3">
-                                                    <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">Workflow Status:</span>
-                                                    <WorkflowDropdown
-                                                        currentStatus={order.status}
-                                                        onStatusChange={(newStatus) => updateOrderStatus(order.id, newStatus)}
-                                                        disabled={updatingStatus === order.id}
-                                                        size="md"
-                                                    />
-                                                </div>
+                                            <div data-html2canvas-ignore="true" className="flex flex-wrap items-center justify-end gap-4 mb-6 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
                                                 <div className="flex gap-2">
                                                     <button
                                                         data-html2canvas-ignore="true"
@@ -1603,7 +1601,7 @@ const Orders = () => {
                                                 </div>
                                             </div>
 
-                                            <div data-html2canvas-ignore="true" className="quote-admin-only mb-8 rounded-2xl border border-emerald-200 bg-white p-4 shadow-sm">
+                                            <div data-html2canvas-ignore="true" className="hidden quote-admin-only mb-8 rounded-2xl border border-emerald-200 bg-white p-4 shadow-sm">
                                                 <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                                                     <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 w-full xl:max-w-[760px]">
                                                         <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
@@ -1649,7 +1647,7 @@ const Orders = () => {
                                                 </div>
                                             </div>
 
-                                            <div className="quote-print-card bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden mb-6">
+                                            <div className="hidden quote-print-card bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden mb-6">
                                                 <div className="px-6 py-4 border-b border-slate-200">
                                                     <h4 className="text-lg font-black text-slate-900">Customer information</h4>
                                                 </div>
@@ -1676,7 +1674,7 @@ const Orders = () => {
                                             <div className="quote-print-layout grid grid-cols-1 lg:grid-cols-3 gap-6 p-1 sm:p-2 bg-slate-50">
                                                 {/* Left Column: Customer & Details */}
                                                 <div className="quote-print-sidebar lg:order-2 space-y-6">
-                                                    <div className="quote-print-card bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                                                    <div className="quote-print-card bg-white rounded-2xl border border-slate-200 border-t-4 border-t-primary shadow-sm overflow-hidden">
                                                         <div className="px-6 py-5 border-b border-slate-200">
                                                             <h4 className="text-xl font-black text-slate-900">Order summary</h4>
                                                         </div>
@@ -1687,6 +1685,22 @@ const Orders = () => {
                                                                 <div className="flex justify-between gap-4"><span className="text-slate-500">Setup</span><span className="font-black text-slate-900">{formatMoney(quotePreview.lines.filter(line => line.type === 'setup').reduce((sum, line) => sum + line.adjusted, 0))}</span></div>
                                                             )}
                                                             <div className="flex justify-between gap-4"><span className="text-slate-500">Total (ex. VAT)</span><span className="font-black text-slate-900">{formatMoney(quotePreview.adjustedSubtotal)}</span></div>
+                                                            <div data-html2canvas-ignore="true" className="quote-admin-only flex items-center justify-between gap-4 rounded-xl border border-orange-200 bg-orange-50 px-3 py-2.5">
+                                                                <label className="text-xs font-black text-orange-700">Overall discount</label>
+                                                                <div className="relative w-24">
+                                                                    <input
+                                                                        type="number"
+                                                                        min="0"
+                                                                        max="100"
+                                                                        step="0.01"
+                                                                        value={quoteAdjustments[String(order.id)]?.['overall-discount-percent'] ?? ''}
+                                                                        onChange={(event) => updateQuoteAmount(order.id, 'overall-discount-percent', event.target.value)}
+                                                                        placeholder="0"
+                                                                        className="w-full rounded-lg border border-orange-200 bg-white py-1.5 pl-2 pr-7 text-right text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-orange-300"
+                                                                    />
+                                                                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-orange-600 text-xs font-black">%</span>
+                                                                </div>
+                                                            </div>
                                                             {quotePreview.discountAmount > 0 && (
                                                                 <div className="flex justify-between gap-4 text-emerald-600"><span className="font-bold">Total saving ({quotePreview.discountPercent.toFixed(2)}%)</span><span className="font-black">−{formatMoney(quotePreview.discountAmount)}</span></div>
                                                             )}
@@ -1698,6 +1712,11 @@ const Orders = () => {
                                                                 <span className="text-lg font-black text-slate-900">Total (inc. VAT)</span>
                                                                 <span className="text-3xl font-black text-emerald-600">{formatMoney(quotePreview.totalIncVat)}</span>
                                                             </div>
+                                                            {quotePreview.hasChanges && (
+                                                                <button data-html2canvas-ignore="true" type="button" onClick={() => resetQuoteAdjustments(order.id)} className="quote-admin-only mt-4 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-500 hover:border-slate-300 hover:text-slate-900">
+                                                                    Reset price edits
+                                                                </button>
+                                                            )}
                                                         </div>
                                                     </div>
 
@@ -1943,9 +1962,9 @@ const Orders = () => {
                                                 <div className="quote-print-main lg:col-span-2 lg:order-1 space-y-8">
                                                     
                                                     {/* Email-style editable basket lines */}
-                                                    <div className="quote-print-cost bg-white rounded-2xl border border-slate-200 shadow-sm p-6 lg:p-8">
-                                                        <h4 className="text-xl font-black text-slate-900 mb-6 flex items-center gap-2">
-                                                            Basket items <span className="text-sm font-semibold text-slate-400">({basket.length})</span>
+                                                    <div className="quote-print-cost bg-white rounded-2xl border border-slate-200 border-t-4 border-t-orange-400 shadow-sm p-5 lg:p-6">
+                                                        <h4 className="text-lg font-black text-slate-900 mb-5 flex items-center gap-2">
+                                                            <Package className="w-5 h-5 text-orange-500" /> Basket items <span className="text-sm font-semibold text-slate-400">({basket.length})</span>
                                                         </h4>
                                                         
                                                         <div className="space-y-4">
@@ -1954,7 +1973,6 @@ const Orders = () => {
                                                                 const lineDiscountPercent = line.original > 0 ? (lineDiscount / line.original) * 100 : 0
                                                                 const rawValue = quoteAdjustments[String(order.id)]?.[line.key]
                                                                 const quantity = Math.max(1, money(line.quantity))
-                                                                const unitValue = line.enteredAdjusted / quantity
                                                                 const lineItem = line.item || {}
                                                                 const normalizedPosition = String(lineItem.position || lineItem.positionSlug || '').toLowerCase().replace(/[^a-z0-9]/g, '')
                                                                 const matchingLogo = line.type === 'customization'
@@ -1967,58 +1985,47 @@ const Orders = () => {
                                                                         : ''
 
                                                                 return (
-                                                                    <div key={line.key} className="p-5 rounded-xl border border-slate-200 bg-white flex flex-col xl:flex-row xl:items-center justify-between gap-4 shadow-sm hover:border-primary/30 transition-colors">
-                                                                        <div className="flex items-center gap-4 min-w-0">
-                                                                            <div className="w-16 h-16 shrink-0 rounded-lg border border-slate-200 bg-white flex items-center justify-center overflow-hidden">
-                                                                                {imageUrl ? <img src={imageUrl} alt="" className="w-full h-full object-contain p-1" /> : <ImageIcon className="w-6 h-6 text-slate-300" />}
+                                                                    <div key={line.key} className={`p-4 rounded-xl border border-slate-200 border-l-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm transition-all ${line.type === 'product' ? 'border-l-orange-400 bg-orange-50/30 hover:bg-orange-50/60' : line.type === 'setup' ? 'border-l-amber-400 bg-amber-50/30 hover:bg-amber-50/60' : 'border-l-blue-400 bg-blue-50/30 hover:bg-blue-50/60'}`}>
+                                                                        <div className="flex items-center gap-3 min-w-0">
+                                                                            <div className="w-14 h-14 shrink-0 rounded-lg border border-slate-200 bg-white flex items-center justify-center overflow-hidden shadow-sm">
+                                                                                {imageUrl ? <img src={imageUrl} alt="" className="w-full h-full object-contain p-1" /> : <ImageIcon className="w-5 h-5 text-slate-300" />}
                                                                             </div>
                                                                             <div className="min-w-0">
-                                                                                <div className="font-bold text-lg text-slate-900 mb-1.5 flex flex-wrap items-center gap-2">
-                                                                                    {line.label} <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest bg-slate-100 px-2 py-0.5 rounded-full">{line.type === 'product' ? 'garment' : line.type === 'setup' ? 'setup' : 'customisation'}</span>
+                                                                                <div className="font-bold text-base text-slate-900 mb-1 flex flex-wrap items-center gap-2 leading-snug">
+                                                                                    {line.label} <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${line.type === 'product' ? 'bg-orange-100 text-orange-700' : line.type === 'setup' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'}`}>{line.type === 'product' ? 'garment' : line.type === 'setup' ? 'setup' : 'customisation'}</span>
                                                                                 </div>
-                                                                                <div className="text-sm font-semibold text-slate-500 flex flex-wrap gap-x-6 gap-y-1">
+                                                                                <div className="text-xs font-semibold text-slate-500 flex flex-wrap gap-x-4 gap-y-1">
                                                                                     <span>{line.description} · Qty {quantity}</span>
-                                                                                    {lineDiscount > 0 && (
-                                                                                        <span className="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">{lineDiscountPercent.toFixed(2)}% off</span>
-                                                                                    )}
                                                                                 </div>
                                                                             </div>
                                                                         </div>
-                                                                        <div className="flex flex-col sm:flex-row sm:items-center justify-end gap-3">
-                                                                            <div className="text-right">
-                                                                                {lineDiscount > 0 && (
-                                                                                    <div className="text-sm font-black text-slate-400 line-through">{formatMoney(line.original)}</div>
-                                                                                )}
-                                                                                <div className="text-2xl font-black text-slate-900 tracking-tight">{formatMoney(line.adjusted)}</div>
-                                                                                <div className="text-[9px] text-slate-400 font-black uppercase">ex VAT</div>
-                                                                            </div>
-                                                                            <div data-html2canvas-ignore="true" className="quote-admin-only w-full sm:w-32">
-                                                                                <label className="block text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1">Unit price</label>
-                                                                                <div className="relative">
-                                                                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-black">£</span>
-                                                                                    <input
-                                                                                        type="number"
-                                                                                        min="0"
-                                                                                        step="0.01"
-                                                                                        value={unitValue.toFixed(2)}
-                                                                                        onChange={(event) => updateQuoteAmount(order.id, line.key, event.target.value === '' ? '' : String(Math.max(0, Number(event.target.value)) * quantity))}
-                                                                                        className="w-full rounded-xl border border-slate-300 bg-white py-2.5 pl-7 pr-3 text-sm font-black text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
-                                                                                    />
+                                                                        <div className="flex items-center justify-end gap-3 sm:min-w-[180px]">
+                                                                            <div data-html2canvas-ignore="true" className="quote-admin-only w-full sm:w-40">
+                                                                                <div className="flex items-center justify-end gap-2 mb-1.5 min-h-4">
+                                                                                    {lineDiscount > 0 && (
+                                                                                        <>
+                                                                                            <span className="text-xs font-bold text-slate-400 line-through">{formatMoney(line.original)}</span>
+                                                                                            <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[9px] font-black text-emerald-700">{lineDiscountPercent.toFixed(2)}% off</span>
+                                                                                        </>
+                                                                                    )}
                                                                                 </div>
-                                                                            </div>
-                                                                            <div data-html2canvas-ignore="true" className="quote-admin-only w-full sm:w-36">
-                                                                                <label className="block text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1">Line total</label>
                                                                                 <div className="relative">
                                                                                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-black">£</span>
                                                                                     <input
+                                                                                        aria-label={`${line.label} total price excluding VAT`}
                                                                                         type="number"
                                                                                         min="0"
                                                                                         step="0.01"
                                                                                         value={rawValue ?? line.enteredAdjusted.toFixed(2)}
                                                                                         onChange={(event) => updateQuoteAmount(order.id, line.key, event.target.value)}
-                                                                                        className="w-full rounded-xl border border-slate-300 bg-white py-2.5 pl-7 pr-3 text-sm font-black text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                                                                                        className="w-full rounded-xl border border-slate-300 bg-white py-2.5 pl-7 pr-10 text-right text-base font-black text-slate-900 shadow-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/15"
                                                                                     />
+                                                                                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[8px] font-black uppercase text-slate-400">ex VAT</span>
                                                                                 </div>
+                                                                            </div>
+                                                                            <div className="quote-print-final-price hidden text-right">
+                                                                                {lineDiscount > 0 && <div className="text-xs font-bold text-slate-400 line-through">{formatMoney(line.original)}</div>}
+                                                                                <div className="text-lg font-black text-slate-900">{formatMoney(line.adjusted)}</div>
                                                                             </div>
                                                                         </div>
                                                                     </div>
@@ -2032,7 +2039,7 @@ const Orders = () => {
                                                             )}
 
                                                             {/* Email-style quote total */}
-                                                            <div className="bg-slate-50 border border-slate-200 p-5 lg:p-6 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 mt-6">
+                                                            <div className="hidden bg-slate-50 border border-slate-200 p-5 lg:p-6 rounded-2xl flex-col sm:flex-row sm:items-center justify-between gap-3 mt-6">
                                                                 <div>
                                                                     <div className="font-black text-slate-900 text-xl">Quote total</div>
                                                                     {quotePreview.appliedDiscountPercent > 0 && (
