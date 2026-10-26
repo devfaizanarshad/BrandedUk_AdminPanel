@@ -621,10 +621,20 @@ const Orders = () => {
                 [lineKey]: value
             }
         }))
+        setRevisionTotals((prev) => {
+            const next = { ...prev }
+            delete next[String(orderId)]
+            return next
+        })
     }
 
     const resetQuoteAdjustments = (orderId) => {
         setQuoteAdjustments((prev) => {
+            const next = { ...prev }
+            delete next[String(orderId)]
+            return next
+        })
+        setRevisionTotals((prev) => {
             const next = { ...prev }
             delete next[String(orderId)]
             return next
@@ -817,9 +827,12 @@ const Orders = () => {
             : (originalSubtotal > 0 && summary.vatAmount !== undefined ? money(summary.vatAmount) / originalSubtotal : 0.2)
         const vatAmount = adjustedSubtotal * vatRate
         const totalIncVat = adjustedSubtotal + vatAmount
-        const originalTotalIncVat = money(summary.totalIncVat) || (originalSubtotal * (1 + vatRate))
-        const discountAmount = Math.max(0, originalTotalIncVat - totalIncVat)
-        const discountPercent = originalTotalIncVat > 0 ? (discountAmount / originalTotalIncVat) * 100 : 0
+        // Derive both totals from the same visible quote lines. The submitted
+        // summary can contain stale/legacy totals that include costs no longer
+        // represented in the editable breakdown.
+        const originalTotalIncVat = originalSubtotal * (1 + vatRate)
+        const discountAmount = Math.max(0, originalSubtotal - adjustedSubtotal)
+        const discountPercent = originalSubtotal > 0 ? (discountAmount / originalSubtotal) * 100 : 0
         const hasChanges = lines.some((line) => Math.abs(line.original - line.adjusted) > 0.009)
         const savedTotals = revisionTotals[orderId]
 
