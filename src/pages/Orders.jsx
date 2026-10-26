@@ -421,10 +421,59 @@ const Orders = () => {
         }
     }
 
+    const downloadCanvasAsPdf = (canvas, fileName, JsPdfConstructor) => {
+        const pdf = new JsPdfConstructor({
+            orientation: 'portrait',
+            unit: 'pt',
+            format: 'a4',
+            compress: true
+        })
+        const pageWidth = pdf.internal.pageSize.getWidth()
+        const pageHeight = pdf.internal.pageSize.getHeight()
+        const margin = 24
+        const printableWidth = pageWidth - (margin * 2)
+        const printableHeight = pageHeight - (margin * 2)
+        const pixelsPerPage = Math.floor((printableHeight / printableWidth) * canvas.width)
+        let sourceY = 0
+        let pageIndex = 0
+
+        while (sourceY < canvas.height) {
+            const sliceHeight = Math.min(pixelsPerPage, canvas.height - sourceY)
+            const pageCanvas = document.createElement('canvas')
+            pageCanvas.width = canvas.width
+            pageCanvas.height = sliceHeight
+
+            const context = pageCanvas.getContext('2d')
+            context.fillStyle = '#ffffff'
+            context.fillRect(0, 0, pageCanvas.width, pageCanvas.height)
+            context.drawImage(
+                canvas,
+                0,
+                sourceY,
+                canvas.width,
+                sliceHeight,
+                0,
+                0,
+                canvas.width,
+                sliceHeight
+            )
+
+            if (pageIndex > 0) pdf.addPage()
+            const renderedHeight = (sliceHeight * printableWidth) / canvas.width
+            pdf.addImage(pageCanvas.toDataURL('image/jpeg', 0.94), 'JPEG', margin, margin, printableWidth, renderedHeight, undefined, 'FAST')
+
+            sourceY += sliceHeight
+            pageIndex += 1
+        }
+
+        pdf.save(`${fileName}.pdf`)
+    }
+
     const handleDownloadPDF = async (order) => {
         setIsGeneratingPdf(order.id)
         const elementId = `invoice-content-${order.id}`
         const element = document.getElementById(elementId)
+        let renderHost = null
 
         if (!element) {
             setIsGeneratingPdf(null)
@@ -432,14 +481,74 @@ const Orders = () => {
         }
 
         try {
+            const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
+                import('html2canvas'),
+                import('jspdf')
+            ])
             const clonedElement = element.cloneNode(true)
             clonedElement.querySelectorAll('[data-html2canvas-ignore="true"]').forEach((node) => node.remove())
+            clonedElement.querySelectorAll('.quote-pdf-only, .quote-pdf-customer, .quote-pdf-assets, .quote-print-final-price').forEach((node) => {
+                node.classList.remove('hidden')
+            })
+            clonedElement.querySelectorAll('.quote-admin-only').forEach((node) => node.remove())
+            clonedElement.querySelectorAll('.quote-print-layout').forEach((node) => {
+                node.className = 'quote-print-layout grid grid-cols-[minmax(0,1fr)_250px] gap-4 bg-slate-50 p-4 items-start'
+            })
+            clonedElement.querySelectorAll('.quote-print-main').forEach((node) => {
+                node.className = 'quote-print-main min-w-0 space-y-4'
+            })
+            clonedElement.querySelectorAll('.quote-print-sidebar').forEach((node) => {
+                node.className = 'quote-print-sidebar min-w-0 space-y-4'
+            })
+            clonedElement.querySelectorAll('button').forEach((node) => node.remove())
+
+            renderHost = document.createElement('div')
+            renderHost.setAttribute('aria-hidden', 'true')
+            Object.assign(renderHost.style, {
+                position: 'fixed',
+                left: '-10000px',
+                top: '0',
+                width: '794px',
+                padding: '20px',
+                background: '#ffffff',
+                zIndex: '-1'
+            })
+            clonedElement.style.width = '754px'
+            clonedElement.style.maxWidth = '754px'
+            clonedElement.style.border = '0'
+            clonedElement.style.boxShadow = 'none'
+            renderHost.appendChild(clonedElement)
+            document.body.appendChild(renderHost)
+
+            await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+            if (document.fonts?.ready) await document.fonts.ready
+
+            const images = Array.from(clonedElement.querySelectorAll('img'))
+            await Promise.all(images.map((image) => image.complete
+                ? Promise.resolve()
+                : new Promise((resolve) => {
+                    image.addEventListener('load', resolve, { once: true })
+                    image.addEventListener('error', resolve, { once: true })
+                })))
+
+            const canvas = await html2canvas(clonedElement, {
+                backgroundColor: '#ffffff',
+                scale: 2,
+                useCORS: true,
+                allowTaint: false,
+                logging: false,
+                width: 754,
+                windowWidth: 1200,
+                scrollX: 0,
+                scrollY: 0
+            })
             const fileName = `BrandedUK_Order_${order.customer_name || 'Customer'}_${order.quote_id}`.replace(/\s+/g, '_')
-            await printFromHiddenFrame(buildPrintDocument(clonedElement.outerHTML), fileName)
+            downloadCanvasAsPdf(canvas, fileName, jsPDF)
         } catch (error) {
             console.error('Error generating PDF:', error)
             alert('Failed to generate PDF')
         } finally {
+            renderHost?.remove()
             setIsGeneratingPdf(null)
         }
     }
@@ -1561,6 +1670,26 @@ const Orders = () => {
                                 {isExpanded && (
                                     <div className="border-t border-slate-100 bg-slate-50/50">
                                         <div className="quote-print-content p-8">
+                                            <div className="quote-pdf-only hidden mb-5 overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                                                <div className="h-1.5 bg-orange-500" />
+                                                <div className="flex items-center justify-between gap-6 px-6 py-5">
+                                                    <div>
+                                                        <div className="text-2xl font-black tracking-tight text-slate-950">
+                                                            Branded<span className="text-orange-500">UK</span>
+                                                        </div>
+                                                        <div className="mt-1 text-xs font-medium text-slate-500">Custom workwear & uniforms</div>
+                                                    </div>
+                                                    <div className="min-w-0 flex-1 border-l border-slate-200 pl-6">
+                                                        <div className="text-xl font-black text-slate-950">Customer quote</div>
+                                                        <div className="mt-1 text-xs font-semibold text-slate-500">
+                                                            {order.quote_id} &middot; {new Date(order.created_at).toLocaleDateString()}
+                                                        </div>
+                                                    </div>
+                                                    <div className="rounded-lg bg-orange-50 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-orange-700">
+                                                        Quote summary
+                                                    </div>
+                                                </div>
+                                            </div>
                                             {/* Action Bar */}
                                             <div data-html2canvas-ignore="true" className="flex flex-wrap items-center justify-end gap-4 mb-6 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
                                                 <div className="flex gap-2">
@@ -1647,7 +1776,7 @@ const Orders = () => {
                                                 </div>
                                             </div>
 
-                                            <div className="hidden quote-print-card bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden mb-6">
+                                            <div className="hidden quote-pdf-customer quote-print-card bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden mb-5">
                                                 <div className="px-6 py-4 border-b border-slate-200">
                                                     <h4 className="text-lg font-black text-slate-900">Customer information</h4>
                                                 </div>
@@ -1702,7 +1831,7 @@ const Orders = () => {
                                                                 </div>
                                                             </div>
                                                             {quotePreview.discountAmount > 0 && (
-                                                                <div className="flex justify-between gap-4 text-emerald-600"><span className="font-bold">Total saving ({quotePreview.discountPercent.toFixed(2)}%)</span><span className="font-black">−{formatMoney(quotePreview.discountAmount)}</span></div>
+                                                                <div className="flex justify-between gap-4 text-emerald-600"><span className="font-bold">Total saving ({quotePreview.discountPercent.toFixed(2)}%)</span><span className="font-black">-{formatMoney(quotePreview.discountAmount)}</span></div>
                                                             )}
                                                             <div className="flex justify-between gap-4"><span className="text-slate-500">VAT ({(quotePreview.vatRate * 100).toFixed(0)}%)</span><span className="font-black text-slate-900">{formatMoney(quotePreview.vatAmount)}</span></div>
                                                         </div>
@@ -1884,7 +2013,7 @@ const Orders = () => {
                                                         if (allLogos.length === 0) return null
 
                                                         return (
-                                                            <div className="hidden quote-print-card bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+                                                            <div className="hidden quote-pdf-assets quote-print-card bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
                                                                 <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
                                                                     <ImageIcon className="w-4 h-4 text-primary" /> Uploaded Logos ({allLogos.length})
                                                                 </h4>
