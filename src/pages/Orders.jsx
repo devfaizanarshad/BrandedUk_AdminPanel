@@ -807,6 +807,11 @@ const Orders = () => {
             adjustments['digitizing-fee'] = String(money(digitizingAdjusted).toFixed(2))
         }
 
+        const deliveryAdjusted = totals.deliveryPreDiscountLineTotal ?? totals.deliveryAdjustedLineTotal
+        if (deliveryAdjusted !== undefined && deliveryAdjusted !== null) {
+            adjustments['delivery-fee'] = String(money(deliveryAdjusted).toFixed(2))
+        }
+
         ;(snapshot?.customizations || []).forEach((customization, idx) => {
             const adjusted = customization.preDiscountLineTotal ?? customization.adjustedLineTotal
             if (adjusted !== undefined && adjusted !== null) {
@@ -973,6 +978,22 @@ const Orders = () => {
             })
         }
 
+        const submittedDeliveryIncVat = money(summary.deliveryIncVat ?? summary.deliveryFee)
+        const submittedDeliveryVat = money(summary.deliveryVatAmount)
+        const deliveryOriginal = money(summary.deliveryExVat ?? Math.max(0, submittedDeliveryIncVat - submittedDeliveryVat))
+        if (deliveryOriginal > 0) {
+            lines.push({
+                key: 'delivery-fee',
+                type: 'delivery',
+                label: 'Delivery',
+                description: `${formatMoney(submittedDeliveryIncVat || deliveryOriginal * 1.2)} inc VAT`,
+                quantity: 1,
+                originalUnitPrice: deliveryOriginal,
+                original: deliveryOriginal,
+                enteredAdjusted: getAdjustedAmount(orderId, 'delivery-fee', deliveryOriginal)
+            })
+        }
+
         const originalSubtotalFromLines = lines.reduce((total, line) => total + line.original, 0)
         const priceEditSubtotal = lines.reduce((total, line) => total + line.enteredAdjusted, 0)
         const fallbackSubtotal = money(summary.totalExVat ?? summary.subtotal)
@@ -1023,6 +1044,7 @@ const Orders = () => {
             return acc
         }, {})
         const digitizingLine = lineByKey['digitizing-fee']
+        const deliveryLine = lineByKey['delivery-fee']
 
         return {
             customer: {
@@ -1086,7 +1108,10 @@ const Orders = () => {
                 priceEditSubtotal: quotePreview.priceEditSubtotal,
                 digitizingOriginalLineTotal: digitizingLine?.original ?? 0,
                 digitizingAdjustedLineTotal: digitizingLine?.adjusted ?? 0,
-                digitizingPreDiscountLineTotal: digitizingLine?.enteredAdjusted ?? 0
+                digitizingPreDiscountLineTotal: digitizingLine?.enteredAdjusted ?? 0,
+                deliveryOriginalLineTotal: deliveryLine?.original ?? 0,
+                deliveryAdjustedLineTotal: deliveryLine?.adjusted ?? 0,
+                deliveryPreDiscountLineTotal: deliveryLine?.enteredAdjusted ?? 0
             }
         }
     }
@@ -1813,6 +1838,9 @@ const Orders = () => {
                                                             {quotePreview.lines.some(line => line.type === 'setup') && (
                                                                 <div className="flex justify-between gap-4"><span className="text-slate-500">Setup</span><span className="font-black text-slate-900">{formatMoney(quotePreview.lines.filter(line => line.type === 'setup').reduce((sum, line) => sum + line.adjusted, 0))}</span></div>
                                                             )}
+                                                            {quotePreview.lines.some(line => line.type === 'delivery') && (
+                                                                <div className="flex justify-between gap-4"><span className="text-slate-500">Delivery</span><span className="font-black text-slate-900">{formatMoney(quotePreview.lines.filter(line => line.type === 'delivery').reduce((sum, line) => sum + line.adjusted, 0))}</span></div>
+                                                            )}
                                                             <div className="flex justify-between gap-4"><span className="text-slate-500">Total (ex. VAT)</span><span className="font-black text-slate-900">{formatMoney(quotePreview.adjustedSubtotal)}</span></div>
                                                             <div data-html2canvas-ignore="true" className="quote-admin-only flex items-center justify-between gap-4 rounded-xl border border-orange-200 bg-orange-50 px-3 py-2.5">
                                                                 <label className="text-xs font-black text-orange-700">Overall discount</label>
@@ -2114,14 +2142,14 @@ const Orders = () => {
                                                                         : ''
 
                                                                 return (
-                                                                    <div key={line.key} className={`p-4 rounded-xl border border-slate-200 border-l-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm transition-all ${line.type === 'product' ? 'border-l-orange-400 bg-orange-50/30 hover:bg-orange-50/60' : line.type === 'setup' ? 'border-l-amber-400 bg-amber-50/30 hover:bg-amber-50/60' : 'border-l-blue-400 bg-blue-50/30 hover:bg-blue-50/60'}`}>
+                                                                    <div key={line.key} className={`p-4 rounded-xl border border-slate-200 border-l-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm transition-all ${line.type === 'product' ? 'border-l-orange-400 bg-orange-50/30 hover:bg-orange-50/60' : line.type === 'setup' ? 'border-l-amber-400 bg-amber-50/30 hover:bg-amber-50/60' : line.type === 'delivery' ? 'border-l-violet-400 bg-violet-50/30 hover:bg-violet-50/60' : 'border-l-blue-400 bg-blue-50/30 hover:bg-blue-50/60'}`}>
                                                                         <div className="flex items-center gap-3 min-w-0">
                                                                             <div className="w-14 h-14 shrink-0 rounded-lg border border-slate-200 bg-white flex items-center justify-center overflow-hidden shadow-sm">
-                                                                                {imageUrl ? <img src={imageUrl} alt="" className="w-full h-full object-contain p-1" /> : <ImageIcon className="w-5 h-5 text-slate-300" />}
+                                                                                {imageUrl ? <img src={imageUrl} alt="" className="w-full h-full object-contain p-1" /> : line.type === 'delivery' ? <Truck className="w-5 h-5 text-violet-400" /> : <ImageIcon className="w-5 h-5 text-slate-300" />}
                                                                             </div>
                                                                             <div className="min-w-0">
                                                                                 <div className="font-bold text-base text-slate-900 mb-1 flex flex-wrap items-center gap-2 leading-snug">
-                                                                                    {line.label} <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${line.type === 'product' ? 'bg-orange-100 text-orange-700' : line.type === 'setup' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'}`}>{line.type === 'product' ? 'garment' : line.type === 'setup' ? 'setup' : 'customisation'}</span>
+                                                                                    {line.label} <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${line.type === 'product' ? 'bg-orange-100 text-orange-700' : line.type === 'setup' ? 'bg-amber-100 text-amber-700' : line.type === 'delivery' ? 'bg-violet-100 text-violet-700' : 'bg-blue-100 text-blue-700'}`}>{line.type === 'product' ? 'garment' : line.type === 'setup' ? 'setup' : line.type === 'delivery' ? 'delivery' : 'customisation'}</span>
                                                                                 </div>
                                                                                 <div className="text-xs font-semibold text-slate-500 flex flex-wrap gap-x-4 gap-y-1">
                                                                                     <span>{line.description} · Qty {quantity}</span>
