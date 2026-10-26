@@ -39,6 +39,163 @@ import {
 import { API_BASE } from '../config'
 import WorkflowDropdown, { WORKFLOW_STATUSES, getStatusStyle } from '../components/WorkflowDropdown'
 
+const resolveAdminAssetUrl = (asset) => {
+    if (!asset) return ''
+    if (typeof asset === 'object') {
+        return resolveAdminAssetUrl(asset.url || asset.dataUrl || asset.dataURL || asset.src || asset.relativePath || asset.path || '')
+    }
+    const value = String(asset).trim()
+    if (!value || /^(?:bklogo|blob):/i.test(value)) return ''
+    if (value.startsWith('data:')) return value
+    if (/^https?:\/\//i.test(value)) {
+        return value.replace('http://localhost:3004', API_BASE).replace('http://127.0.0.1:3004', API_BASE)
+    }
+    return `${API_BASE}/${value.replace(/^\/+/, '')}`
+}
+
+const normalizeAssetKey = (value) => String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '')
+
+const getAdminAssetName = (asset, fallback = 'logo.png') => {
+    if (!asset || typeof asset === 'string') return fallback
+    return asset.originalName || asset.fileName || asset.name || fallback
+}
+
+const findCustomizationLogo = (customization = {}, logos = {}) => {
+    const directCandidates = [
+        customization.logo,
+        customization.logoData,
+        customization.logoUrl,
+        customization.logoDataUrl,
+        customization.image
+    ]
+
+    for (const candidate of directCandidates) {
+        const url = resolveAdminAssetUrl(candidate)
+        if (url) return { url, name: getAdminAssetName(candidate) }
+    }
+
+    const position = normalizeAssetKey(customization.position || customization.positionSlug)
+    const logoEntries = logos && typeof logos === 'object' ? Object.entries(logos) : []
+    const matchedEntry = logoEntries.find(([key]) => {
+        const normalizedKey = normalizeAssetKey(key)
+        return normalizedKey === position || normalizedKey.endsWith(position) || position.endsWith(normalizedKey)
+    }) || (logoEntries.length === 1 ? logoEntries[0] : null)
+
+    if (!matchedEntry) return null
+    const url = resolveAdminAssetUrl(matchedEntry[1])
+    return url ? { url, name: getAdminAssetName(matchedEntry[1]) } : null
+}
+
+const downloadAdminAsset = async (asset, fallbackName = 'logo.png') => {
+    const url = resolveAdminAssetUrl(asset?.url || asset)
+    if (!url) return
+
+    try {
+        const response = await fetch(url)
+        if (!response.ok) throw new Error('Unable to download asset')
+        const blob = await response.blob()
+        const objectUrl = window.URL.createObjectURL(blob)
+        const link = document.createElement('a')
+        link.href = objectUrl
+        link.download = asset?.name || fallbackName
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+        window.URL.revokeObjectURL(objectUrl)
+    } catch {
+        window.open(url, '_blank', 'noopener,noreferrer')
+    }
+}
+
+const QuoteLinePriceEditor = ({ line, orderId, adjustments, onChange, accent = 'focus:border-primary focus:ring-primary/15' }) => {
+    const original = Number(line.original) || 0
+    const adjusted = Number(line.adjusted) || 0
+    const discount = Math.max(0, original - adjusted)
+    const rawValue = adjustments[String(orderId)]?.[line.key]
+
+    return (
+        <div className="flex items-center justify-end gap-3 sm:min-w-[180px]">
+            <div data-html2canvas-ignore="true" className="quote-admin-only w-full sm:w-40">
+                <div className="mb-1.5 flex min-h-4 items-center justify-end gap-2">
+                    {discount > 0 && <span className="text-xs font-bold text-slate-400 line-through">£{original.toFixed(2)}</span>}
+                </div>
+                <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-black text-slate-400">£</span>
+                    <input
+                        aria-label={`${line.label} total price excluding VAT`}
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={rawValue ?? Number(line.enteredAdjusted).toFixed(2)}
+                        onChange={(event) => onChange(orderId, line.key, event.target.value)}
+                        className={`w-full rounded-xl border border-slate-300 bg-white py-2.5 pl-7 pr-10 text-right text-base font-black text-slate-900 shadow-sm outline-none transition focus:ring-2 ${accent}`}
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[8px] font-black uppercase text-slate-400">ex VAT</span>
+                </div>
+            </div>
+            <div className="quote-print-final-price hidden text-right">
+                {discount > 0 && <div className="text-xs font-bold text-slate-400 line-through">£{original.toFixed(2)}</div>}
+                <div className="text-lg font-black text-slate-900">£{adjusted.toFixed(2)}</div>
+            </div>
+        </div>
+    )
+}
+
+const GroupedQuoteItems = ({ productGroups, additionalChargeLines, logos, orderId, adjustments, onPriceChange }) => (
+    <div className="space-y-5">
+        {productGroups.map(({ productLine, customizations }) => {
+            const productImage = resolveAdminAssetUrl(productLine.item?.image)
+            const combinedTotal = (Number(productLine.adjusted) || 0) + customizations.reduce((total, line) => total + (Number(line.adjusted) || 0), 0)
+            return (
+                <section key={productLine.key} data-pdf-keep-together="true" className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                    <div className="flex flex-col gap-4 border-l-4 border-l-orange-400 bg-gradient-to-r from-orange-50/80 to-white p-4 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="flex min-w-0 items-center gap-3">
+                            <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-orange-100 bg-white shadow-sm">
+                                {productImage ? <img src={productImage} alt={productLine.label} className="h-full w-full object-contain p-1" /> : <Package className="h-6 w-6 text-orange-300" />}
+                            </div>
+                            <div className="min-w-0">
+                                <div className="flex flex-wrap items-center gap-2 text-base font-black leading-snug text-slate-900">{productLine.label}<span className="rounded-full bg-orange-100 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-orange-700">Garment</span></div>
+                                <div className="mt-1 text-xs font-semibold text-slate-500">{productLine.description} · Qty {Math.max(1, Number(productLine.quantity) || 0)}</div>
+                            </div>
+                        </div>
+                        <QuoteLinePriceEditor line={productLine} orderId={orderId} adjustments={adjustments} onChange={onPriceChange} accent="focus:border-orange-400 focus:ring-orange-200" />
+                    </div>
+
+                    {customizations.length > 0 && <div className="border-t border-slate-200 px-4 pb-3 pt-2">
+                        <div className="py-2 text-[10px] font-black uppercase tracking-widest text-slate-400">Decorations applied to this garment</div>
+                        <div className="divide-y divide-slate-100">
+                            {customizations.map((line) => {
+                                const logoAsset = findCustomizationLogo(line.item, logos)
+                                return <div key={line.key} className="flex flex-col gap-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+                                    <div className="flex min-w-0 items-center gap-3">
+                                        <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-blue-100 bg-blue-50/40">
+                                            {logoAsset?.url ? <img src={logoAsset.url} alt={`${line.label} logo`} className="h-full w-full object-contain p-1" /> : <ImageIcon className="h-5 w-5 text-blue-300" />}
+                                        </div>
+                                        <div className="min-w-0">
+                                            <div className="flex flex-wrap items-center gap-2 font-bold text-slate-900">{line.label}<span className="rounded-full bg-blue-100 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-blue-700">Customisation</span></div>
+                                            <div className="mt-1 text-xs font-semibold text-slate-500">{line.description} · Qty {Math.max(1, Number(line.quantity) || 0)}</div>
+                                            {logoAsset?.url && <button type="button" data-html2canvas-ignore="true" onClick={() => downloadAdminAsset(logoAsset, `${normalizeAssetKey(line.label) || 'logo'}.png`)} className="quote-admin-only mt-2 inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-white px-2.5 py-1.5 text-[10px] font-black text-blue-700 transition hover:bg-blue-50"><Download className="h-3.5 w-3.5" /> Download logo</button>}
+                                        </div>
+                                    </div>
+                                    <QuoteLinePriceEditor line={line} orderId={orderId} adjustments={adjustments} onChange={onPriceChange} accent="focus:border-blue-400 focus:ring-blue-200" />
+                                </div>
+                            })}
+                        </div>
+                    </div>}
+                    <div className="flex items-center justify-end gap-3 border-t border-slate-100 bg-slate-50/70 px-4 py-3 text-sm"><span className="font-semibold text-slate-500">Garment total</span><span className="text-lg font-black text-emerald-600">£{combinedTotal.toFixed(2)}</span></div>
+                </section>
+            )
+        })}
+
+        {additionalChargeLines.map((line) => <div key={line.key} data-pdf-keep-together="true" className="flex flex-col gap-4 rounded-xl border border-amber-200 border-l-4 border-l-amber-400 bg-amber-50/40 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3"><div className="flex h-12 w-12 items-center justify-center rounded-lg border border-amber-100 bg-white"><ImageIcon className="h-5 w-5 text-amber-400" /></div><div><div className="font-bold text-slate-900">{line.label} <span className="ml-1 rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-black uppercase text-amber-700">Setup</span></div><div className="mt-1 text-xs font-semibold text-slate-500">{line.description}</div></div></div>
+            <QuoteLinePriceEditor line={line} orderId={orderId} adjustments={adjustments} onChange={onPriceChange} accent="focus:border-amber-400 focus:ring-amber-200" />
+        </div>)}
+
+        {productGroups.length === 0 && additionalChargeLines.length === 0 && <div className="rounded-2xl border border-dashed border-slate-300 p-5 text-sm font-bold text-slate-500">No priced quote lines were found in this request.</div>}
+    </div>
+)
+
 const Orders = () => {
     const navigate = useNavigate()
     const { orderId } = useParams()
@@ -228,6 +385,10 @@ const Orders = () => {
                                 display: none !important;
                             }
 
+                            .quote-print-final-price {
+                                display: block !important;
+                            }
+
                             .quote-print-shell {
                                 border: 0 !important;
                                 box-shadow: none !important;
@@ -240,7 +401,7 @@ const Orders = () => {
 
                             .quote-print-layout {
                                 display: grid !important;
-                                grid-template-columns: 31% minmax(0, 69%) !important;
+                                grid-template-columns: minmax(0, 69%) 31% !important;
                                 gap: 14px !important;
                                 padding: 0 !important;
                                 background: #ffffff !important;
@@ -403,10 +564,117 @@ const Orders = () => {
         }
     }
 
+    const preparePdfPageBreaks = async (root, pageHeightPx = 1060) => {
+        const blocks = Array.from(root.querySelectorAll('[data-pdf-keep-together="true"]'))
+
+        for (const block of blocks) {
+            const rootTop = root.getBoundingClientRect().top
+            const rect = block.getBoundingClientRect()
+            const blockTop = rect.top - rootTop
+            const blockHeight = rect.height
+            const currentPage = Math.floor(blockTop / pageHeightPx)
+            const pageBottom = (currentPage + 1) * pageHeightPx
+            const crossesPage = blockTop + blockHeight > pageBottom - 18
+
+            if (crossesPage && blockHeight < pageHeightPx - 36) {
+                const existingMargin = Number.parseFloat(window.getComputedStyle(block).marginTop) || 0
+                block.style.marginTop = `${existingMargin + Math.max(0, pageBottom - blockTop) + 18}px`
+                await new Promise((resolve) => requestAnimationFrame(resolve))
+            }
+        }
+    }
+
+    const inlinePdfImages = async (root) => {
+        const images = Array.from(root.querySelectorAll('img'))
+
+        await Promise.all(images.map(async (image) => {
+            const source = image.currentSrc || image.src
+            if (!source || source.startsWith('data:')) return
+
+            try {
+                const response = await fetch(source, { mode: 'cors' })
+                if (!response.ok) throw new Error(`Image request failed: ${response.status}`)
+                const blob = await response.blob()
+                const dataUrl = await new Promise((resolve, reject) => {
+                    const reader = new FileReader()
+                    reader.onload = () => resolve(reader.result)
+                    reader.onerror = reject
+                    reader.readAsDataURL(blob)
+                })
+                image.src = dataUrl
+                if (image.decode) await image.decode().catch(() => {})
+            } catch {
+                const fallback = document.createElement('div')
+                const isArtwork = /logo|artwork|print|embroider/i.test(image.alt || '')
+                fallback.textContent = isArtwork ? 'ARTWORK' : 'PRODUCT'
+                fallback.style.cssText = 'display:flex;width:100%;height:100%;align-items:center;justify-content:center;background:#f8fafc;color:#94a3b8;font-size:9px;font-weight:800;letter-spacing:.4px;'
+                image.replaceWith(fallback)
+            }
+        }))
+    }
+
+    const downloadCanvasAsPdf = (canvas, fileName, JsPdfConstructor) => {
+        const pdf = new JsPdfConstructor({
+            orientation: 'portrait',
+            unit: 'pt',
+            format: 'a4',
+            compress: true
+        })
+        const pageWidth = pdf.internal.pageSize.getWidth()
+        const pageHeight = pdf.internal.pageSize.getHeight()
+        const margin = 24
+        const footerSpace = 24
+        const printableWidth = pageWidth - (margin * 2)
+        const printableHeight = pageHeight - (margin * 2) - footerSpace
+        const pixelsPerPage = Math.floor((printableHeight / printableWidth) * canvas.width)
+        const totalPages = Math.max(1, Math.ceil(canvas.height / pixelsPerPage))
+        let sourceY = 0
+        let pageIndex = 0
+
+        while (sourceY < canvas.height) {
+            const sliceHeight = Math.min(pixelsPerPage, canvas.height - sourceY)
+            const pageCanvas = document.createElement('canvas')
+            pageCanvas.width = canvas.width
+            pageCanvas.height = sliceHeight
+
+            const context = pageCanvas.getContext('2d')
+            context.fillStyle = '#ffffff'
+            context.fillRect(0, 0, pageCanvas.width, pageCanvas.height)
+            context.drawImage(
+                canvas,
+                0,
+                sourceY,
+                canvas.width,
+                sliceHeight,
+                0,
+                0,
+                canvas.width,
+                sliceHeight
+            )
+
+            if (pageIndex > 0) pdf.addPage()
+            const renderedHeight = (sliceHeight * printableWidth) / canvas.width
+            pdf.addImage(pageCanvas.toDataURL('image/jpeg', 0.94), 'JPEG', margin, margin, printableWidth, renderedHeight, undefined, 'FAST')
+            pdf.setDrawColor(226, 232, 240)
+            pdf.line(margin, pageHeight - 31, pageWidth - margin, pageHeight - 31)
+            pdf.setFont('helvetica', 'normal')
+            pdf.setFontSize(8)
+            pdf.setTextColor(100, 116, 139)
+            pdf.text('BrandedUK  |  0208 974 2722  |  info@brandeduk.com', margin, pageHeight - 17)
+            pdf.text(`Page ${pageIndex + 1} of ${totalPages}`, pageWidth - margin, pageHeight - 17, { align: 'right' })
+
+            sourceY += sliceHeight
+            pageIndex += 1
+        }
+
+        pdf.save(`${fileName}.pdf`)
+    }
+
     const handleDownloadPDF = async (order) => {
         setIsGeneratingPdf(order.id)
         const elementId = `invoice-content-${order.id}`
         const element = document.getElementById(elementId)
+        let renderHost = null
 
         if (!element) {
             setIsGeneratingPdf(null)
@@ -414,14 +682,78 @@ const Orders = () => {
         }
 
         try {
+            const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
+                import('html2canvas'),
+                import('jspdf')
+            ])
             const clonedElement = element.cloneNode(true)
             clonedElement.querySelectorAll('[data-html2canvas-ignore="true"]').forEach((node) => node.remove())
+            clonedElement.querySelectorAll('.quote-pdf-only, .quote-pdf-customer, .quote-print-final-price').forEach((node) => {
+                node.classList.remove('hidden')
+            })
+            clonedElement.querySelectorAll('.quote-pdf-assets').forEach((node) => node.remove())
+            clonedElement.querySelectorAll('.quote-admin-only').forEach((node) => node.remove())
+            clonedElement.querySelectorAll('.quote-print-layout').forEach((node) => {
+                node.className = 'quote-print-layout block bg-slate-50 p-4'
+            })
+            clonedElement.querySelectorAll('.quote-print-main').forEach((node) => {
+                node.className = 'quote-print-main min-w-0 mt-4 space-y-4'
+            })
+            clonedElement.querySelectorAll('.quote-print-sidebar').forEach((node) => {
+                node.className = 'quote-print-sidebar min-w-0 space-y-4'
+            })
+            clonedElement.querySelectorAll('button').forEach((node) => node.remove())
+
+            renderHost = document.createElement('div')
+            renderHost.setAttribute('aria-hidden', 'true')
+            Object.assign(renderHost.style, {
+                position: 'fixed',
+                left: '-10000px',
+                top: '0',
+                width: '794px',
+                padding: '20px',
+                background: '#ffffff',
+                zIndex: '-1'
+            })
+            clonedElement.style.width = '754px'
+            clonedElement.style.maxWidth = '754px'
+            clonedElement.style.border = '0'
+            clonedElement.style.boxShadow = 'none'
+            renderHost.appendChild(clonedElement)
+            document.body.appendChild(renderHost)
+
+            await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+            if (document.fonts?.ready) await document.fonts.ready
+
+            const images = Array.from(clonedElement.querySelectorAll('img'))
+            await Promise.all(images.map((image) => image.complete
+                ? Promise.resolve()
+                : new Promise((resolve) => {
+                    image.addEventListener('load', resolve, { once: true })
+                    image.addEventListener('error', resolve, { once: true })
+                })))
+
+            await inlinePdfImages(clonedElement)
+            await preparePdfPageBreaks(clonedElement)
+
+            const canvas = await html2canvas(clonedElement, {
+                backgroundColor: '#ffffff',
+                scale: 2,
+                useCORS: true,
+                allowTaint: false,
+                logging: false,
+                width: 754,
+                windowWidth: 1200,
+                scrollX: 0,
+                scrollY: 0
+            })
             const fileName = `BrandedUK_Order_${order.customer_name || 'Customer'}_${order.quote_id}`.replace(/\s+/g, '_')
-            await printFromHiddenFrame(buildPrintDocument(clonedElement.outerHTML), fileName)
+            downloadCanvasAsPdf(canvas, fileName, jsPDF)
         } catch (error) {
             console.error('Error generating PDF:', error)
             alert('Failed to generate PDF')
         } finally {
+            renderHost?.remove()
             setIsGeneratingPdf(null)
         }
     }
@@ -621,10 +953,20 @@ const Orders = () => {
                 [lineKey]: value
             }
         }))
+        setRevisionTotals((prev) => {
+            const next = { ...prev }
+            delete next[String(orderId)]
+            return next
+        })
     }
 
     const resetQuoteAdjustments = (orderId) => {
         setQuoteAdjustments((prev) => {
+            const next = { ...prev }
+            delete next[String(orderId)]
+            return next
+        })
+        setRevisionTotals((prev) => {
             const next = { ...prev }
             delete next[String(orderId)]
             return next
@@ -658,19 +1000,33 @@ const Orders = () => {
         const adjustments = {}
         const totals = snapshot?.totals || {}
 
-        if (totals.garmentAdjustedLineTotal !== undefined && totals.garmentAdjustedLineTotal !== null) {
-            adjustments['garment-cost'] = String(money(totals.garmentAdjustedLineTotal).toFixed(2))
+        ;(snapshot?.products || []).forEach((product, idx) => {
+            const adjusted = product.preDiscountLineTotal ?? product.adjustedLineTotal
+            if (adjusted !== undefined && adjusted !== null) {
+                adjustments[`product-${idx}`] = String(money(adjusted).toFixed(2))
+            }
+        })
+
+        const digitizingAdjusted = totals.digitizingPreDiscountLineTotal ?? totals.digitizingAdjustedLineTotal
+        if (digitizingAdjusted !== undefined && digitizingAdjusted !== null) {
+            adjustments['digitizing-fee'] = String(money(digitizingAdjusted).toFixed(2))
         }
 
-        if (totals.digitizingAdjustedLineTotal !== undefined && totals.digitizingAdjustedLineTotal !== null) {
-            adjustments['digitizing-fee'] = String(money(totals.digitizingAdjustedLineTotal).toFixed(2))
+        const deliveryAdjusted = totals.deliveryPreDiscountLineTotal ?? totals.deliveryAdjustedLineTotal
+        if (deliveryAdjusted !== undefined && deliveryAdjusted !== null) {
+            adjustments['delivery-fee'] = String(money(deliveryAdjusted).toFixed(2))
         }
 
         ;(snapshot?.customizations || []).forEach((customization, idx) => {
-            if (customization.adjustedLineTotal !== undefined && customization.adjustedLineTotal !== null) {
-                adjustments[`customization-${idx}`] = String(money(customization.adjustedLineTotal).toFixed(2))
+            const adjusted = customization.preDiscountLineTotal ?? customization.adjustedLineTotal
+            if (adjusted !== undefined && adjusted !== null) {
+                adjustments[`customization-${idx}`] = String(money(adjusted).toFixed(2))
             }
         })
+
+        if (totals.appliedDiscountPercent !== undefined && totals.appliedDiscountPercent !== null) {
+            adjustments['overall-discount-percent'] = String(money(totals.appliedDiscountPercent))
+        }
 
         return adjustments
     }
@@ -767,18 +1123,32 @@ const Orders = () => {
     const buildQuotePreview = (order, basket, customizations, summary) => {
         const orderId = String(order.id)
         const lines = []
-        const garmentOriginal = money(summary.garmentCost ?? getBasketTotal(basket))
+        const legacyGarmentOriginal = money(summary.garmentCost ?? getBasketTotal(basket))
+        const legacyGarmentAdjusted = getAdjustedAmount(orderId, 'garment-cost', legacyGarmentOriginal)
 
-        if (garmentOriginal > 0) {
+        basket.forEach((item, idx) => {
+            const quantity = getBasketQuantity(item)
+            const original = money(item.itemTotal ?? item.lineTotal ?? item.totalPrice ?? item.total ?? money(item.unitPrice) * quantity)
+            if (original <= 0) return
+            const legacyAllocated = legacyGarmentOriginal > 0
+                ? (original / legacyGarmentOriginal) * legacyGarmentAdjusted
+                : original
+            const hasIndividualEdit = quoteAdjustments[orderId]?.[`product-${idx}`] !== undefined
             lines.push({
-                key: 'garment-cost',
-                type: 'garment',
-                label: 'Garment Cost',
-                description: `${money(summary.totalQuantity) || basket.reduce((total, item) => total + getBasketQuantity(item), 0)} item${(money(summary.totalQuantity) || basket.length) === 1 ? '' : 's'}`,
-                original: garmentOriginal,
-                adjusted: getAdjustedAmount(orderId, 'garment-cost', garmentOriginal)
+                key: `product-${idx}`,
+                index: idx,
+                type: 'product',
+                item,
+                label: item.name || item.code || `Garment ${idx + 1}`,
+                description: [item.code, item.color || item.colour, item.size].filter(Boolean).join(' · '),
+                quantity,
+                originalUnitPrice: quantity > 0 ? original / quantity : original,
+                original,
+                enteredAdjusted: hasIndividualEdit
+                    ? getAdjustedAmount(orderId, `product-${idx}`, original)
+                    : legacyAllocated
             })
-        }
+        })
 
         customizations.forEach((cust, idx) => {
             const original = money(cust.lineTotal ?? money(cust.unitPrice) * money(cust.quantity || 1))
@@ -787,11 +1157,15 @@ const Orders = () => {
             const labelParts = [cust.position || cust.positionSlug, cust.method].filter(Boolean)
             lines.push({
                 key: `customization-${idx}`,
+                index: idx,
                 type: 'customization',
+                item: cust,
                 label: labelParts.length ? labelParts.join(' ') : `Customization ${idx + 1}`,
                 description: `Qty ${cust.quantity || 1}${cust.unitPrice !== undefined ? ` at ${formatMoney(cust.unitPrice)}` : ''}`,
+                quantity: money(cust.quantity || 1),
+                originalUnitPrice: money(cust.unitPrice) || original / Math.max(1, money(cust.quantity || 1)),
                 original,
-                adjusted: getAdjustedAmount(orderId, `customization-${idx}`, original)
+                enteredAdjusted: getAdjustedAmount(orderId, `customization-${idx}`, original)
             })
         })
 
@@ -802,38 +1176,70 @@ const Orders = () => {
                 type: 'setup',
                 label: 'Digitisation / Setup Fee',
                 description: 'One-time template setup fee',
+                quantity: 1,
+                originalUnitPrice: digitizingOriginal,
                 original: digitizingOriginal,
-                adjusted: getAdjustedAmount(orderId, 'digitizing-fee', digitizingOriginal)
+                enteredAdjusted: getAdjustedAmount(orderId, 'digitizing-fee', digitizingOriginal)
+            })
+        }
+
+        const submittedDeliveryIncVat = money(summary.deliveryIncVat ?? summary.deliveryFee)
+        const submittedDeliveryVat = money(summary.deliveryVatAmount)
+        const deliveryOriginal = money(summary.deliveryExVat ?? Math.max(0, submittedDeliveryIncVat - submittedDeliveryVat))
+        if (deliveryOriginal > 0) {
+            lines.push({
+                key: 'delivery-fee',
+                type: 'delivery',
+                label: 'Delivery',
+                description: `${formatMoney(submittedDeliveryIncVat || deliveryOriginal * 1.2)} inc VAT`,
+                quantity: 1,
+                originalUnitPrice: deliveryOriginal,
+                original: deliveryOriginal,
+                enteredAdjusted: getAdjustedAmount(orderId, 'delivery-fee', deliveryOriginal)
             })
         }
 
         const originalSubtotalFromLines = lines.reduce((total, line) => total + line.original, 0)
-        const adjustedSubtotalFromLines = lines.reduce((total, line) => total + line.adjusted, 0)
+        const priceEditSubtotal = lines.reduce((total, line) => total + line.enteredAdjusted, 0)
         const fallbackSubtotal = money(summary.totalExVat ?? summary.subtotal)
         const originalSubtotal = originalSubtotalFromLines || fallbackSubtotal
-        const adjustedSubtotal = adjustedSubtotalFromLines || fallbackSubtotal
+        const rawDiscountPercent = Number(quoteAdjustments[orderId]?.['overall-discount-percent'] ?? 0)
+        const appliedDiscountPercent = Number.isFinite(rawDiscountPercent)
+            ? Math.min(100, Math.max(0, rawDiscountPercent))
+            : 0
+        const discountMultiplier = 1 - appliedDiscountPercent / 100
+        lines.forEach((line) => {
+            line.adjusted = Math.round(line.enteredAdjusted * discountMultiplier * 100) / 100
+        })
+        const adjustedSubtotalFromLines = lines.reduce((total, line) => total + line.adjusted, 0)
+        const adjustedSubtotal = lines.length ? adjustedSubtotalFromLines : fallbackSubtotal
         const vatRate = Number.isFinite(Number(summary.vatRate))
             ? Number(summary.vatRate)
             : (originalSubtotal > 0 && summary.vatAmount !== undefined ? money(summary.vatAmount) / originalSubtotal : 0.2)
         const vatAmount = adjustedSubtotal * vatRate
         const totalIncVat = adjustedSubtotal + vatAmount
-        const originalTotalIncVat = money(summary.totalIncVat) || (originalSubtotal * (1 + vatRate))
-        const discountAmount = Math.max(0, originalTotalIncVat - totalIncVat)
-        const discountPercent = originalTotalIncVat > 0 ? (discountAmount / originalTotalIncVat) * 100 : 0
-        const hasChanges = lines.some((line) => Math.abs(line.original - line.adjusted) > 0.009)
-        const savedTotals = revisionTotals[orderId]
+        // Derive both totals from the same visible quote lines. The submitted
+        // summary can contain stale/legacy totals that include costs no longer
+        // represented in the editable breakdown.
+        const originalTotalIncVat = originalSubtotal * (1 + vatRate)
+        const discountAmount = Math.max(0, originalSubtotal - adjustedSubtotal)
+        const discountPercent = originalSubtotal > 0 ? (discountAmount / originalSubtotal) * 100 : 0
+        const hasChanges = lines.some((line) => Math.abs(line.original - line.adjusted) > 0.009) || appliedDiscountPercent > 0
 
         return {
             lines,
             originalSubtotal,
+            priceEditSubtotal,
             adjustedSubtotal,
             vatRate,
             vatAmount,
-            totalIncVat: savedTotals?.totalIncVat ?? totalIncVat,
-            originalTotalIncVat: savedTotals?.originalTotalIncVat ?? originalTotalIncVat,
-            discountAmount: savedTotals?.discountAmount ?? discountAmount,
-            discountPercent: savedTotals?.discountPercent ?? discountPercent,
-            hasChanges: savedTotals?.hasChanges ?? hasChanges
+            totalIncVat,
+            originalTotalIncVat,
+            discountAmount,
+            discountPercent,
+            appliedDiscountPercent,
+            appliedDiscountAmount: Math.max(0, priceEditSubtotal - adjustedSubtotal),
+            hasChanges
         }
     }
 
@@ -842,11 +1248,8 @@ const Orders = () => {
             acc[line.key] = line
             return acc
         }, {})
-        const garmentLine = lineByKey['garment-cost']
         const digitizingLine = lineByKey['digitizing-fee']
-        const productOriginalTotal = basket.reduce((total, item) => (
-            total + money(item.itemTotal ?? item.lineTotal ?? item.totalPrice ?? item.total ?? money(item.unitPrice) * getBasketQuantity(item))
-        ), 0)
+        const deliveryLine = lineByKey['delivery-fee']
 
         return {
             customer: {
@@ -856,11 +1259,11 @@ const Orders = () => {
                 company: order.customer_company || '',
                 address: order.customer_address || ''
             },
-            products: basket.map((item) => {
+            products: basket.map((item, idx) => {
                 const originalLineTotal = money(item.itemTotal ?? item.lineTotal ?? item.totalPrice ?? item.total ?? money(item.unitPrice) * getBasketQuantity(item))
-                const adjustedLineTotal = garmentLine && productOriginalTotal > 0
-                    ? (originalLineTotal / productOriginalTotal) * garmentLine.adjusted
-                    : originalLineTotal
+                const line = lineByKey[`product-${idx}`]
+                const quantity = getBasketQuantity(item)
+                const adjustedLineTotal = line?.adjusted ?? originalLineTotal
 
                 return {
                     code: item.code || '',
@@ -868,9 +1271,11 @@ const Orders = () => {
                     colour: item.color || item.colour || '',
                     image: typeof item.image === 'string' ? item.image : item.image?.url || '',
                     sizes: item.sizes || (item.size ? { [item.size]: item.quantity || 1 } : {}),
-                    quantity: getBasketQuantity(item),
-                    unitPrice: money(item.unitPrice),
+                    quantity,
+                    unitPrice: quantity > 0 ? adjustedLineTotal / quantity : adjustedLineTotal,
+                    originalUnitPrice: quantity > 0 ? originalLineTotal / quantity : originalLineTotal,
                     originalLineTotal,
+                    preDiscountLineTotal: line?.enteredAdjusted ?? originalLineTotal,
                     adjustedLineTotal
                 }
             }),
@@ -879,11 +1284,18 @@ const Orders = () => {
                 return {
                     method: cust.method || '',
                     position: cust.position || cust.positionSlug || '',
+                    productCode: cust.productCode || cust.code || '',
+                    itemIndex: cust.itemIndex,
                     quantity: money(cust.quantity || 1),
-                    unitPrice: money(cust.unitPrice),
+                    unitPrice: line && money(cust.quantity || 1) > 0 ? line.adjusted / money(cust.quantity || 1) : money(cust.unitPrice),
+                    originalUnitPrice: money(cust.unitPrice),
                     originalLineTotal: money(cust.lineTotal ?? money(cust.unitPrice) * money(cust.quantity || 1)),
+                    preDiscountLineTotal: line ? line.enteredAdjusted : money(cust.lineTotal ?? money(cust.unitPrice) * money(cust.quantity || 1)),
                     adjustedLineTotal: line ? line.adjusted : money(cust.lineTotal ?? money(cust.unitPrice) * money(cust.quantity || 1)),
-                    text: cust.text || ''
+                    text: cust.text || '',
+                    font: cust.font || '',
+                    textColour: cust.textColour || cust.textColor || '',
+                    logo: cust.logo || cust.logoUrl || ''
                 }
             }),
             logos: logos || {},
@@ -896,10 +1308,15 @@ const Orders = () => {
                 totalIncVat: quotePreview.totalIncVat,
                 discountAmount: quotePreview.discountAmount,
                 discountPercent: quotePreview.discountPercent,
-                garmentOriginalLineTotal: garmentLine?.original ?? 0,
-                garmentAdjustedLineTotal: garmentLine?.adjusted ?? 0,
+                appliedDiscountPercent: quotePreview.appliedDiscountPercent,
+                appliedDiscountAmount: quotePreview.appliedDiscountAmount,
+                priceEditSubtotal: quotePreview.priceEditSubtotal,
                 digitizingOriginalLineTotal: digitizingLine?.original ?? 0,
-                digitizingAdjustedLineTotal: digitizingLine?.adjusted ?? 0
+                digitizingAdjustedLineTotal: digitizingLine?.adjusted ?? 0,
+                digitizingPreDiscountLineTotal: digitizingLine?.enteredAdjusted ?? 0,
+                deliveryOriginalLineTotal: deliveryLine?.original ?? 0,
+                deliveryAdjustedLineTotal: deliveryLine?.adjusted ?? 0,
+                deliveryPreDiscountLineTotal: deliveryLine?.enteredAdjusted ?? 0
             }
         }
     }
@@ -1391,6 +1808,41 @@ const Orders = () => {
                         const { basket, customizations, summary, logos } = parseQuoteData(order)
                         const quotePreview = buildQuotePreview(order, basket, customizations, summary)
                         const displayTotal = quotePreview.totalIncVat || parseFloat(order.total_amount) || summary.totalIncVat || 0
+                        const productLines = quotePreview.lines.filter((line) => line.type === 'product')
+                        const customizationLines = quotePreview.lines.filter((line) => line.type === 'customization')
+                        const additionalChargeLines = quotePreview.lines.filter((line) => line.type === 'setup')
+                        const deliveryLine = quotePreview.lines.find((line) => line.type === 'delivery')
+                        const productGroups = productLines.map((productLine) => ({ productLine, customizations: [] }))
+
+                        customizationLines.forEach((customizationLine) => {
+                            if (!productGroups.length) return
+                            const customization = customizationLine.item || {}
+                            const requestedIndex = Number(customization.itemIndex)
+                            let productIndex = Number.isInteger(requestedIndex) && requestedIndex >= 0 && requestedIndex < productGroups.length
+                                ? requestedIndex
+                                : -1
+                            const explicitCode = String(customization.productCode || customization.code || customization.sku || customization.itemCode || '').trim().toLowerCase()
+
+                            if (productIndex < 0 && explicitCode) {
+                                productIndex = productGroups.findIndex(({ productLine }) => String(productLine.item?.code || productLine.item?.productCode || productLine.item?.sku || '').trim().toLowerCase() === explicitCode)
+                            }
+
+                            if (productIndex < 0) {
+                                const quantity = Number(customization.quantity)
+                                const quantityMatches = productGroups
+                                    .map(({ productLine }, index) => ({ index, quantity: Number(productLine.quantity) }))
+                                    .filter((product) => Number.isFinite(quantity) && product.quantity === quantity)
+                                if (quantityMatches.length === 1) productIndex = quantityMatches[0].index
+                            }
+
+                            if (productIndex < 0) {
+                                productIndex = productGroups.reduce((bestIndex, group, index, groups) => (
+                                    group.customizations.length < groups[bestIndex].customizations.length ? index : bestIndex
+                                ), 0)
+                            }
+
+                            productGroups[productIndex].customizations.push(customizationLine)
+                        })
 
                         return (
                             <div
@@ -1446,9 +1898,12 @@ const Orders = () => {
                                                     <div className="w-10 h-10 rounded-full bg-gradient-to-br from-slate-100 to-slate-200 border border-white shadow-sm flex items-center justify-center font-black text-slate-500 text-sm">
                                                         {order.customer_name?.charAt(0)}
                                                     </div>
-                                                    <div>
+                                                    <div className="min-w-0">
                                                         <div className="font-bold text-slate-900 leading-tight">{order.customer_name}</div>
                                                         <div className="text-xs text-slate-500 font-medium truncate max-w-[200px]">{order.customer_email}</div>
+                                                        <div className="text-xs text-slate-400 font-medium mt-0.5 flex items-center gap-1.5">
+                                                            <Phone className="w-3 h-3" /> {order.customer_phone || 'No phone provided'}
+                                                        </div>
                                                     </div>
                                                 </div>
                                             </div>
@@ -1480,17 +1935,28 @@ const Orders = () => {
                                 {isExpanded && (
                                     <div className="border-t border-slate-100 bg-slate-50/50">
                                         <div className="quote-print-content p-8">
-                                            {/* Action Bar */}
-                                            <div data-html2canvas-ignore="true" className="flex flex-wrap items-center justify-between gap-4 mb-8 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-                                                <div className="flex items-center gap-3">
-                                                    <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">Workflow Status:</span>
-                                                    <WorkflowDropdown
-                                                        currentStatus={order.status}
-                                                        onStatusChange={(newStatus) => updateOrderStatus(order.id, newStatus)}
-                                                        disabled={updatingStatus === order.id}
-                                                        size="md"
-                                                    />
+                                            <div data-pdf-keep-together="true" className="quote-pdf-only hidden mb-5 overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                                                <div className="h-1.5 bg-orange-500" />
+                                                <div className="flex items-center justify-between gap-6 px-6 py-5">
+                                                    <div>
+                                                        <div className="text-2xl font-black tracking-tight text-slate-950">
+                                                            Branded<span className="text-orange-500">UK</span>
+                                                        </div>
+                                                        <div className="mt-1 text-xs font-medium text-slate-500">Custom workwear & uniforms</div>
+                                                    </div>
+                                                    <div className="min-w-0 flex-1 border-l border-slate-200 pl-6">
+                                                        <div className="text-xl font-black text-slate-950">Customer quote</div>
+                                                        <div className="mt-1 text-xs font-semibold text-slate-500">
+                                                            {order.quote_id} &middot; {new Date(order.created_at).toLocaleDateString()}
+                                                        </div>
+                                                    </div>
+                                                    <div className="rounded-lg bg-orange-50 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-orange-700">
+                                                        Quote summary
+                                                    </div>
                                                 </div>
+                                            </div>
+                                            {/* Action Bar */}
+                                            <div data-html2canvas-ignore="true" className="flex flex-wrap items-center justify-end gap-4 mb-6 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
                                                 <div className="flex gap-2">
                                                     <button
                                                         data-html2canvas-ignore="true"
@@ -1529,9 +1995,9 @@ const Orders = () => {
                                                 </div>
                                             </div>
 
-                                            <div data-html2canvas-ignore="true" className="quote-admin-only mb-8 rounded-2xl border border-emerald-200 bg-white p-4 shadow-sm">
+                                            <div data-html2canvas-ignore="true" className="hidden quote-admin-only mb-8 rounded-2xl border border-emerald-200 bg-white p-4 shadow-sm">
                                                 <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                                                    <div className="grid grid-cols-3 gap-3 w-full lg:max-w-[520px]">
+                                                    <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 w-full xl:max-w-[760px]">
                                                         <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
                                                             <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Original</div>
                                                             <div className="text-lg font-black text-slate-500 line-through">{formatMoney(quotePreview.originalTotalIncVat)}</div>
@@ -1541,9 +2007,25 @@ const Orders = () => {
                                                             <div className="text-lg font-black text-slate-900">{formatMoney(quotePreview.totalIncVat)}</div>
                                                         </div>
                                                         <div className="bg-slate-900 text-white rounded-xl p-3">
-                                                            <div className="text-[10px] font-black text-white/60 uppercase tracking-widest">Discount</div>
+                                                            <div className="text-[10px] font-black text-white/60 uppercase tracking-widest">Total saving</div>
                                                             <div className="text-lg font-black">
                                                                 {quotePreview.discountAmount > 0 ? `${quotePreview.discountPercent.toFixed(0)}% off` : 'No change'}
+                                                            </div>
+                                                        </div>
+                                                        <div className="bg-orange-50 border border-orange-200 rounded-xl p-3">
+                                                            <label className="text-[10px] font-black text-orange-700 uppercase tracking-widest block mb-1">Apply overall discount</label>
+                                                            <div className="relative">
+                                                                <input
+                                                                    type="number"
+                                                                    min="0"
+                                                                    max="100"
+                                                                    step="0.01"
+                                                                    value={quoteAdjustments[String(order.id)]?.['overall-discount-percent'] ?? ''}
+                                                                    onChange={(event) => updateQuoteAmount(order.id, 'overall-discount-percent', event.target.value)}
+                                                                    placeholder="0"
+                                                                    className="w-full rounded-lg border border-orange-200 bg-white py-1.5 pl-3 pr-8 text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-orange-300"
+                                                                />
+                                                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-orange-600 text-sm font-black">%</span>
                                                             </div>
                                                         </div>
                                                     </div>
@@ -1559,10 +2041,108 @@ const Orders = () => {
                                                 </div>
                                             </div>
 
-                                            <div className="quote-print-layout grid grid-cols-1 lg:grid-cols-3 gap-8 p-1 sm:p-2 bg-slate-50">
+                                            <div data-pdf-keep-together="true" className="hidden quote-pdf-customer quote-print-card bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden mb-5">
+                                                <div className="px-6 py-4 border-b border-slate-200">
+                                                    <h4 className="text-lg font-black text-slate-900">Customer information</h4>
+                                                </div>
+                                                <div className="grid grid-cols-1 md:grid-cols-2">
+                                                    <div className="px-6 py-4 border-b md:border-r border-slate-200">
+                                                        <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Name</div>
+                                                        <div className="font-bold text-slate-900 mt-1">{order.customer_name || '—'}</div>
+                                                    </div>
+                                                    <div className="px-6 py-4 border-b border-slate-200">
+                                                        <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Email address</div>
+                                                        <a href={`mailto:${order.customer_email}`} className="font-bold text-slate-900 hover:text-primary mt-1 block">{order.customer_email || '—'}</a>
+                                                    </div>
+                                                    <div className="px-6 py-4 md:border-r border-slate-200">
+                                                        <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Phone number</div>
+                                                        <a href={`tel:${order.customer_phone}`} className="font-bold text-slate-900 hover:text-primary mt-1 block">{order.customer_phone || '—'}</a>
+                                                    </div>
+                                                    <div className="px-6 py-4">
+                                                        <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Submitted</div>
+                                                        <div className="font-bold text-slate-900 mt-1">{new Date(order.created_at).toLocaleString()}</div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div className="quote-print-layout grid grid-cols-1 lg:grid-cols-3 gap-6 p-1 sm:p-2 bg-slate-50">
                                                 {/* Left Column: Customer & Details */}
-                                                <div className="quote-print-sidebar space-y-6">
-                                                    <div className="quote-print-card bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+                                                <div className="quote-print-sidebar lg:order-2 space-y-6">
+                                                    <div data-pdf-keep-together="true" className="quote-print-card bg-white rounded-2xl border border-slate-200 border-t-4 border-t-primary shadow-sm overflow-hidden">
+                                                        <div className="px-6 py-5 border-b border-slate-200">
+                                                            <h4 className="text-xl font-black text-slate-900">Order summary</h4>
+                                                        </div>
+                                                        <div className="px-6 py-5 space-y-4 text-sm">
+                                                            <div className="flex justify-between gap-4"><span className="text-slate-500">Products</span><span className="font-black text-slate-900">{formatMoney(quotePreview.lines.filter(line => line.type === 'product').reduce((sum, line) => sum + line.adjusted, 0))}</span></div>
+                                                            <div className="flex justify-between gap-4"><span className="text-slate-500">Customisation</span><span className="font-black text-slate-900">{formatMoney(quotePreview.lines.filter(line => line.type === 'customization').reduce((sum, line) => sum + line.adjusted, 0))}</span></div>
+                                                            {quotePreview.lines.some(line => line.type === 'setup') && (
+                                                                <div className="flex justify-between gap-4"><span className="text-slate-500">Setup</span><span className="font-black text-slate-900">{formatMoney(quotePreview.lines.filter(line => line.type === 'setup').reduce((sum, line) => sum + line.adjusted, 0))}</span></div>
+                                                            )}
+                                                            {deliveryLine && (
+                                                                <div className="rounded-xl border border-violet-200 bg-violet-50/70 px-3 py-3">
+                                                                    <div className="flex items-center justify-between gap-3">
+                                                                        <div>
+                                                                            <div className="flex items-center gap-2 font-bold text-violet-800"><Truck className="h-4 w-4" /> Delivery</div>
+                                                                            <div className="mt-0.5 text-[10px] font-semibold text-violet-500">Price excluding VAT</div>
+                                                                        </div>
+                                                                        <div data-html2canvas-ignore="true" className="quote-admin-only relative w-28">
+                                                                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-black text-violet-400">£</span>
+                                                                            <input
+                                                                                aria-label="Delivery price excluding VAT"
+                                                                                type="number"
+                                                                                min="0"
+                                                                                step="0.01"
+                                                                                value={quoteAdjustments[String(order.id)]?.[deliveryLine.key] ?? deliveryLine.enteredAdjusted.toFixed(2)}
+                                                                                onChange={(event) => updateQuoteAmount(order.id, deliveryLine.key, event.target.value)}
+                                                                                className="w-full rounded-lg border border-violet-200 bg-white py-2 pl-7 pr-2 text-right text-sm font-black text-slate-900 outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-200"
+                                                                            />
+                                                                        </div>
+                                                                        <div className="quote-print-final-price hidden font-black text-slate-900">{formatMoney(deliveryLine.adjusted)}</div>
+                                                                    </div>
+                                                                    {deliveryLine.original !== deliveryLine.adjusted && (
+                                                                        <div className="mt-2 text-right text-[10px] font-bold text-emerald-600">
+                                                                            Original <span className="line-through">{formatMoney(deliveryLine.original)}</span>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            )}
+                                                            <div className="flex justify-between gap-4"><span className="text-slate-500">Total (ex. VAT)</span><span className="font-black text-slate-900">{formatMoney(quotePreview.adjustedSubtotal)}</span></div>
+                                                            <div data-html2canvas-ignore="true" className="quote-admin-only flex items-center justify-between gap-4 rounded-xl border border-orange-200 bg-orange-50 px-3 py-2.5">
+                                                                <label className="text-xs font-black text-orange-700">Overall discount</label>
+                                                                <div className="relative w-24">
+                                                                    <input
+                                                                        type="number"
+                                                                        min="0"
+                                                                        max="100"
+                                                                        step="0.01"
+                                                                        value={quoteAdjustments[String(order.id)]?.['overall-discount-percent'] ?? ''}
+                                                                        onChange={(event) => updateQuoteAmount(order.id, 'overall-discount-percent', event.target.value)}
+                                                                        placeholder="0"
+                                                                        className="w-full rounded-lg border border-orange-200 bg-white py-1.5 pl-2 pr-7 text-right text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-orange-300"
+                                                                    />
+                                                                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-orange-600 text-xs font-black">%</span>
+                                                                </div>
+                                                            </div>
+                                                            {quotePreview.discountAmount > 0 && (
+                                                                <div className="flex justify-between gap-4 text-emerald-600"><span className="font-bold">Total saving ({quotePreview.discountPercent.toFixed(2)}%)</span><span className="font-black">-{formatMoney(quotePreview.discountAmount)}</span></div>
+                                                            )}
+                                                            <div className="flex justify-between gap-4"><span className="text-slate-500">VAT ({(quotePreview.vatRate * 100).toFixed(0)}%)</span><span className="font-black text-slate-900">{formatMoney(quotePreview.vatAmount)}</span></div>
+                                                        </div>
+                                                        <div className="px-6 py-6 border-t border-slate-200">
+                                                            {quotePreview.discountAmount > 0 && <div className="text-right text-sm font-bold text-slate-400 line-through mb-1">{formatMoney(quotePreview.originalTotalIncVat)}</div>}
+                                                            <div className="flex items-end justify-between gap-4">
+                                                                <span className="text-lg font-black text-slate-900">Total (inc. VAT)</span>
+                                                                <span className="text-3xl font-black text-emerald-600">{formatMoney(quotePreview.totalIncVat)}</span>
+                                                            </div>
+                                                            {quotePreview.hasChanges && (
+                                                                <button data-html2canvas-ignore="true" type="button" onClick={() => resetQuoteAdjustments(order.id)} className="quote-admin-only mt-4 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-500 hover:border-slate-300 hover:text-slate-900">
+                                                                    Reset price edits
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="hidden quote-print-card bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
                                                         <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
                                                             <User className="w-4 h-4 text-primary" /> Customer Details
                                                         </h4>
@@ -1590,7 +2170,7 @@ const Orders = () => {
 
                                                     {/* Customization Summary */}
                                                     {customizations.length > 0 && (
-                                                        <div className="quote-print-card bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+                                                        <div className="hidden quote-print-card bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
                                                             <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
                                                                 <Edit3 className="w-4 h-4 text-primary" /> Design Requests
                                                             </h4>
@@ -1726,7 +2306,7 @@ const Orders = () => {
                                                         if (allLogos.length === 0) return null
 
                                                         return (
-                                                            <div className="quote-print-card bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+                                                            <div className="hidden quote-pdf-assets quote-print-card bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
                                                                 <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
                                                                     <ImageIcon className="w-4 h-4 text-primary" /> Uploaded Logos ({allLogos.length})
                                                                 </h4>
@@ -1801,58 +2381,81 @@ const Orders = () => {
                                                 </div>
 
                                                 {/* Right Column: Cost Breakdown & Order Items */}
-                                                <div className="quote-print-main lg:col-span-2 space-y-8">
+                                                <div className="quote-print-main lg:col-span-2 lg:order-1 space-y-8">
                                                     
-                                                    {/* Cost Breakdown Section (Inspired by App Design) */}
-                                                    <div className="quote-print-cost bg-white rounded-[24px] border-2 border-primary/20 shadow-md p-6 lg:p-8">
-                                                        <h4 className="text-xl font-black text-slate-900 mb-6 flex items-center gap-2">
-                                                            Cost Breakdown
+                                                    {/* Email-style editable basket lines */}
+                                                    <div className="quote-print-cost bg-white rounded-2xl border border-slate-200 border-t-4 border-t-orange-400 shadow-sm p-5 lg:p-6">
+                                                        <h4 className="text-lg font-black text-slate-900 mb-5 flex items-center gap-2">
+                                                            <Package className="w-5 h-5 text-orange-500" /> Basket items <span className="text-sm font-semibold text-slate-400">({basket.length})</span>
                                                         </h4>
                                                         
-                                                        <div className="space-y-4">
+                                                        <GroupedQuoteItems
+                                                            productGroups={productGroups}
+                                                            additionalChargeLines={additionalChargeLines}
+                                                            logos={logos}
+                                                            orderId={order.id}
+                                                            adjustments={quoteAdjustments}
+                                                            onPriceChange={updateQuoteAmount}
+                                                        />
+                                                        <div className="hidden">
                                                             {quotePreview.lines.map((line, idx) => {
-                                                                const color = line.type === 'garment'
-                                                                    ? '#f97316'
-                                                                    : line.type === 'setup'
-                                                                        ? '#b15d24'
-                                                                        : ['#8b3f96', '#70864f'][idx % 2]
                                                                 const lineDiscount = Math.max(0, line.original - line.adjusted)
                                                                 const lineDiscountPercent = line.original > 0 ? (lineDiscount / line.original) * 100 : 0
                                                                 const rawValue = quoteAdjustments[String(order.id)]?.[line.key]
+                                                                const quantity = Math.max(1, money(line.quantity))
+                                                                const lineItem = line.item || {}
+                                                                const normalizedPosition = String(lineItem.position || lineItem.positionSlug || '').toLowerCase().replace(/[^a-z0-9]/g, '')
+                                                                const matchingLogo = line.type === 'customization'
+                                                                    ? Object.entries(logos || {}).find(([key]) => String(key).toLowerCase().replace(/[^a-z0-9]/g, '') === normalizedPosition)?.[1]
+                                                                    : null
+                                                                const imageUrl = line.type === 'product'
+                                                                    ? resolveAdminAssetUrl(lineItem.image)
+                                                                    : line.type === 'customization'
+                                                                        ? resolveAdminAssetUrl(lineItem.logo || lineItem.logoUrl || matchingLogo)
+                                                                        : ''
 
                                                                 return (
-                                                                    <div key={line.key} style={{ backgroundColor: color }} className="p-5 rounded-2xl text-white flex flex-col xl:flex-row xl:items-center justify-between gap-4 shadow-sm">
-                                                                        <div>
-                                                                            <div className="font-bold text-lg mb-1.5 flex items-center gap-2">
-                                                                                {line.label} <span className="text-[10px] font-black opacity-90 uppercase tracking-widest bg-white/20 px-2 py-0.5 rounded-full">ex vat</span>
+                                                                    <div key={line.key} className={`p-4 rounded-xl border border-slate-200 border-l-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm transition-all ${line.type === 'product' ? 'border-l-orange-400 bg-orange-50/30 hover:bg-orange-50/60' : line.type === 'setup' ? 'border-l-amber-400 bg-amber-50/30 hover:bg-amber-50/60' : line.type === 'delivery' ? 'border-l-violet-400 bg-violet-50/30 hover:bg-violet-50/60' : 'border-l-blue-400 bg-blue-50/30 hover:bg-blue-50/60'}`}>
+                                                                        <div className="flex items-center gap-3 min-w-0">
+                                                                            <div className="w-14 h-14 shrink-0 rounded-lg border border-slate-200 bg-white flex items-center justify-center overflow-hidden shadow-sm">
+                                                                                {imageUrl ? <img src={imageUrl} alt="" className="w-full h-full object-contain p-1" /> : line.type === 'delivery' ? <Truck className="w-5 h-5 text-violet-400" /> : <ImageIcon className="w-5 h-5 text-slate-300" />}
                                                                             </div>
-                                                                            <div className="text-sm font-semibold opacity-90 flex flex-wrap gap-x-6 gap-y-1">
-                                                                                <span>{line.description}</span>
-                                                                                {lineDiscount > 0 && (
-                                                                                    <span className="bg-white/20 px-2 py-0.5 rounded-full">{lineDiscountPercent.toFixed(0)}% discount</span>
-                                                                                )}
+                                                                            <div className="min-w-0">
+                                                                                <div className="font-bold text-base text-slate-900 mb-1 flex flex-wrap items-center gap-2 leading-snug">
+                                                                                    {line.label} <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${line.type === 'product' ? 'bg-orange-100 text-orange-700' : line.type === 'setup' ? 'bg-amber-100 text-amber-700' : line.type === 'delivery' ? 'bg-violet-100 text-violet-700' : 'bg-blue-100 text-blue-700'}`}>{line.type === 'product' ? 'garment' : line.type === 'setup' ? 'setup' : line.type === 'delivery' ? 'delivery' : 'customisation'}</span>
+                                                                                </div>
+                                                                                <div className="text-xs font-semibold text-slate-500 flex flex-wrap gap-x-4 gap-y-1">
+                                                                                    <span>{line.description} · Qty {quantity}</span>
+                                                                                </div>
                                                                             </div>
                                                                         </div>
-                                                                        <div className="flex flex-col sm:flex-row sm:items-center justify-end gap-3">
-                                                                            <div className="text-right">
-                                                                                {lineDiscount > 0 && (
-                                                                                    <div className="text-sm font-black opacity-60 line-through">{formatMoney(line.original)}</div>
-                                                                                )}
-                                                                                <div className="text-2xl font-black tracking-tight">{formatMoney(line.adjusted)}</div>
-                                                                            </div>
-                                                                            <div data-html2canvas-ignore="true" className="quote-admin-only w-full sm:w-36">
-                                                                                <label className="block text-[9px] font-black uppercase tracking-widest text-white/70 mb-1">New price</label>
+                                                                        <div className="flex items-center justify-end gap-3 sm:min-w-[180px]">
+                                                                            <div data-html2canvas-ignore="true" className="quote-admin-only w-full sm:w-40">
+                                                                                <div className="flex items-center justify-end gap-2 mb-1.5 min-h-4">
+                                                                                    {lineDiscount > 0 && (
+                                                                                        <>
+                                                                                            <span className="text-xs font-bold text-slate-400 line-through">{formatMoney(line.original)}</span>
+                                                                                            <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[9px] font-black text-emerald-700">{lineDiscountPercent.toFixed(2)}% off</span>
+                                                                                        </>
+                                                                                    )}
+                                                                                </div>
                                                                                 <div className="relative">
                                                                                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-black">£</span>
                                                                                     <input
+                                                                                        aria-label={`${line.label} total price excluding VAT`}
                                                                                         type="number"
                                                                                         min="0"
                                                                                         step="0.01"
-                                                                                        value={rawValue ?? line.original.toFixed(2)}
+                                                                                        value={rawValue ?? line.enteredAdjusted.toFixed(2)}
                                                                                         onChange={(event) => updateQuoteAmount(order.id, line.key, event.target.value)}
-                                                                                        className="w-full rounded-xl border-0 bg-white py-2.5 pl-7 pr-3 text-sm font-black text-slate-900 shadow-sm outline-none focus:ring-4 focus:ring-white/25"
+                                                                                        className="w-full rounded-xl border border-slate-300 bg-white py-2.5 pl-7 pr-10 text-right text-base font-black text-slate-900 shadow-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/15"
                                                                                     />
+                                                                                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[8px] font-black uppercase text-slate-400">ex VAT</span>
                                                                                 </div>
+                                                                            </div>
+                                                                            <div className="quote-print-final-price hidden text-right">
+                                                                                {lineDiscount > 0 && <div className="text-xs font-bold text-slate-400 line-through">{formatMoney(line.original)}</div>}
+                                                                                <div className="text-lg font-black text-slate-900">{formatMoney(line.adjusted)}</div>
                                                                             </div>
                                                                         </div>
                                                                     </div>
@@ -1865,22 +2468,25 @@ const Orders = () => {
                                                                 </div>
                                                             )}
 
-                                                            {/* Total Cost Block */}
-                                                            <div className="bg-[#cda42c] p-5 lg:p-6 rounded-2xl text-white flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md mt-6">
-                                                                <div className="font-black text-xl flex items-center gap-2">
-                                                                    Total Cost
+                                                            {/* Email-style quote total */}
+                                                            <div className="hidden bg-slate-50 border border-slate-200 p-5 lg:p-6 rounded-2xl flex-col sm:flex-row sm:items-center justify-between gap-3 mt-6">
+                                                                <div>
+                                                                    <div className="font-black text-slate-900 text-xl">Quote total</div>
+                                                                    {quotePreview.appliedDiscountPercent > 0 && (
+                                                                        <div className="text-xs font-bold text-emerald-600 mt-1">Overall discount: {quotePreview.appliedDiscountPercent.toFixed(2)}%</div>
+                                                                    )}
                                                                 </div>
                                                                 <div className="flex flex-col items-end">
                                                                     {quotePreview.discountAmount > 0 && (
-                                                                        <div className="text-sm font-black opacity-60 line-through">
+                                                                        <div className="text-sm font-black text-slate-400 line-through">
                                                                             {formatMoney(quotePreview.originalTotalIncVat)} inc VAT
                                                                         </div>
                                                                     )}
-                                                                    <div className="text-2xl lg:text-3xl font-black tracking-tight flex items-baseline gap-1">
+                                                                    <div className="text-2xl lg:text-3xl font-black text-emerald-600 tracking-tight flex items-baseline gap-1">
                                                                         {formatMoney(quotePreview.adjustedSubtotal)}
-                                                                        <span className="text-xs font-bold opacity-70 uppercase">ex vat</span>
+                                                                        <span className="text-xs font-bold text-slate-400 uppercase">ex vat</span>
                                                                     </div>
-                                                                    <div className="text-sm font-bold opacity-70 mt-0.5">
+                                                                    <div className="text-sm font-bold text-slate-600 mt-0.5">
                                                                         {formatMoney(quotePreview.totalIncVat)} inc VAT
                                                                     </div>
                                                                 </div>
@@ -1888,7 +2494,7 @@ const Orders = () => {
                                                         </div>
                                                     </div>
 
-                                                    <div className="quote-print-items bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                                                    <div className="quote-print-items hidden bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                                                         <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
                                                             <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
                                                                 <Package className="w-4 h-4 text-primary" /> Order Items ({basket.length})
