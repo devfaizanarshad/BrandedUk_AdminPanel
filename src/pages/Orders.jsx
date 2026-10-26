@@ -147,7 +147,7 @@ const GroupedQuoteItems = ({ productGroups, additionalChargeLines, logos, orderI
             const productImage = resolveAdminAssetUrl(productLine.item?.image)
             const combinedTotal = (Number(productLine.adjusted) || 0) + customizations.reduce((total, line) => total + (Number(line.adjusted) || 0), 0)
             return (
-                <section key={productLine.key} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                <section key={productLine.key} data-pdf-keep-together="true" className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                     <div className="flex flex-col gap-4 border-l-4 border-l-orange-400 bg-gradient-to-r from-orange-50/80 to-white p-4 sm:flex-row sm:items-center sm:justify-between">
                         <div className="flex min-w-0 items-center gap-3">
                             <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-orange-100 bg-white shadow-sm">
@@ -187,7 +187,7 @@ const GroupedQuoteItems = ({ productGroups, additionalChargeLines, logos, orderI
             )
         })}
 
-        {additionalChargeLines.map((line) => <div key={line.key} className="flex flex-col gap-4 rounded-xl border border-amber-200 border-l-4 border-l-amber-400 bg-amber-50/40 p-4 sm:flex-row sm:items-center sm:justify-between">
+        {additionalChargeLines.map((line) => <div key={line.key} data-pdf-keep-together="true" className="flex flex-col gap-4 rounded-xl border border-amber-200 border-l-4 border-l-amber-400 bg-amber-50/40 p-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-3"><div className="flex h-12 w-12 items-center justify-center rounded-lg border border-amber-100 bg-white"><ImageIcon className="h-5 w-5 text-amber-400" /></div><div><div className="font-bold text-slate-900">{line.label} <span className="ml-1 rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-black uppercase text-amber-700">Setup</span></div><div className="mt-1 text-xs font-semibold text-slate-500">{line.description}</div></div></div>
             <QuoteLinePriceEditor line={line} orderId={orderId} adjustments={adjustments} onChange={onPriceChange} accent="focus:border-amber-400 focus:ring-amber-200" />
         </div>)}
@@ -564,6 +564,55 @@ const Orders = () => {
         }
     }
 
+    const preparePdfPageBreaks = async (root, pageHeightPx = 1060) => {
+        const blocks = Array.from(root.querySelectorAll('[data-pdf-keep-together="true"]'))
+
+        for (const block of blocks) {
+            const rootTop = root.getBoundingClientRect().top
+            const rect = block.getBoundingClientRect()
+            const blockTop = rect.top - rootTop
+            const blockHeight = rect.height
+            const currentPage = Math.floor(blockTop / pageHeightPx)
+            const pageBottom = (currentPage + 1) * pageHeightPx
+            const crossesPage = blockTop + blockHeight > pageBottom - 18
+
+            if (crossesPage && blockHeight < pageHeightPx - 36) {
+                const existingMargin = Number.parseFloat(window.getComputedStyle(block).marginTop) || 0
+                block.style.marginTop = `${existingMargin + Math.max(0, pageBottom - blockTop) + 18}px`
+                await new Promise((resolve) => requestAnimationFrame(resolve))
+            }
+        }
+    }
+
+    const inlinePdfImages = async (root) => {
+        const images = Array.from(root.querySelectorAll('img'))
+
+        await Promise.all(images.map(async (image) => {
+            const source = image.currentSrc || image.src
+            if (!source || source.startsWith('data:')) return
+
+            try {
+                const response = await fetch(source, { mode: 'cors' })
+                if (!response.ok) throw new Error(`Image request failed: ${response.status}`)
+                const blob = await response.blob()
+                const dataUrl = await new Promise((resolve, reject) => {
+                    const reader = new FileReader()
+                    reader.onload = () => resolve(reader.result)
+                    reader.onerror = reject
+                    reader.readAsDataURL(blob)
+                })
+                image.src = dataUrl
+                if (image.decode) await image.decode().catch(() => {})
+            } catch {
+                const fallback = document.createElement('div')
+                const isArtwork = /logo|artwork|print|embroider/i.test(image.alt || '')
+                fallback.textContent = isArtwork ? 'ARTWORK' : 'PRODUCT'
+                fallback.style.cssText = 'display:flex;width:100%;height:100%;align-items:center;justify-content:center;background:#f8fafc;color:#94a3b8;font-size:9px;font-weight:800;letter-spacing:.4px;'
+                image.replaceWith(fallback)
+            }
+        }))
+    }
+
     const downloadCanvasAsPdf = (canvas, fileName, JsPdfConstructor) => {
         const pdf = new JsPdfConstructor({
             orientation: 'portrait',
@@ -574,9 +623,11 @@ const Orders = () => {
         const pageWidth = pdf.internal.pageSize.getWidth()
         const pageHeight = pdf.internal.pageSize.getHeight()
         const margin = 24
+        const footerSpace = 24
         const printableWidth = pageWidth - (margin * 2)
-        const printableHeight = pageHeight - (margin * 2)
+        const printableHeight = pageHeight - (margin * 2) - footerSpace
         const pixelsPerPage = Math.floor((printableHeight / printableWidth) * canvas.width)
+        const totalPages = Math.max(1, Math.ceil(canvas.height / pixelsPerPage))
         let sourceY = 0
         let pageIndex = 0
 
@@ -604,6 +655,13 @@ const Orders = () => {
             if (pageIndex > 0) pdf.addPage()
             const renderedHeight = (sliceHeight * printableWidth) / canvas.width
             pdf.addImage(pageCanvas.toDataURL('image/jpeg', 0.94), 'JPEG', margin, margin, printableWidth, renderedHeight, undefined, 'FAST')
+            pdf.setDrawColor(226, 232, 240)
+            pdf.line(margin, pageHeight - 31, pageWidth - margin, pageHeight - 31)
+            pdf.setFont('helvetica', 'normal')
+            pdf.setFontSize(8)
+            pdf.setTextColor(100, 116, 139)
+            pdf.text('BrandedUK  |  0208 974 2722  |  info@brandeduk.com', margin, pageHeight - 17)
+            pdf.text(`Page ${pageIndex + 1} of ${totalPages}`, pageWidth - margin, pageHeight - 17, { align: 'right' })
 
             sourceY += sliceHeight
             pageIndex += 1
@@ -630,15 +688,16 @@ const Orders = () => {
             ])
             const clonedElement = element.cloneNode(true)
             clonedElement.querySelectorAll('[data-html2canvas-ignore="true"]').forEach((node) => node.remove())
-            clonedElement.querySelectorAll('.quote-pdf-only, .quote-pdf-customer, .quote-pdf-assets, .quote-print-final-price').forEach((node) => {
+            clonedElement.querySelectorAll('.quote-pdf-only, .quote-pdf-customer, .quote-print-final-price').forEach((node) => {
                 node.classList.remove('hidden')
             })
+            clonedElement.querySelectorAll('.quote-pdf-assets').forEach((node) => node.remove())
             clonedElement.querySelectorAll('.quote-admin-only').forEach((node) => node.remove())
             clonedElement.querySelectorAll('.quote-print-layout').forEach((node) => {
-                node.className = 'quote-print-layout grid grid-cols-[minmax(0,1fr)_250px] gap-4 bg-slate-50 p-4 items-start'
+                node.className = 'quote-print-layout block bg-slate-50 p-4'
             })
             clonedElement.querySelectorAll('.quote-print-main').forEach((node) => {
-                node.className = 'quote-print-main min-w-0 space-y-4'
+                node.className = 'quote-print-main min-w-0 mt-4 space-y-4'
             })
             clonedElement.querySelectorAll('.quote-print-sidebar').forEach((node) => {
                 node.className = 'quote-print-sidebar min-w-0 space-y-4'
@@ -673,6 +732,9 @@ const Orders = () => {
                     image.addEventListener('load', resolve, { once: true })
                     image.addEventListener('error', resolve, { once: true })
                 })))
+
+            await inlinePdfImages(clonedElement)
+            await preparePdfPageBreaks(clonedElement)
 
             const canvas = await html2canvas(clonedElement, {
                 backgroundColor: '#ffffff',
@@ -1873,7 +1935,7 @@ const Orders = () => {
                                 {isExpanded && (
                                     <div className="border-t border-slate-100 bg-slate-50/50">
                                         <div className="quote-print-content p-8">
-                                            <div className="quote-pdf-only hidden mb-5 overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                                            <div data-pdf-keep-together="true" className="quote-pdf-only hidden mb-5 overflow-hidden rounded-2xl border border-slate-200 bg-white">
                                                 <div className="h-1.5 bg-orange-500" />
                                                 <div className="flex items-center justify-between gap-6 px-6 py-5">
                                                     <div>
@@ -1979,7 +2041,7 @@ const Orders = () => {
                                                 </div>
                                             </div>
 
-                                            <div className="hidden quote-pdf-customer quote-print-card bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden mb-5">
+                                            <div data-pdf-keep-together="true" className="hidden quote-pdf-customer quote-print-card bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden mb-5">
                                                 <div className="px-6 py-4 border-b border-slate-200">
                                                     <h4 className="text-lg font-black text-slate-900">Customer information</h4>
                                                 </div>
@@ -2006,7 +2068,7 @@ const Orders = () => {
                                             <div className="quote-print-layout grid grid-cols-1 lg:grid-cols-3 gap-6 p-1 sm:p-2 bg-slate-50">
                                                 {/* Left Column: Customer & Details */}
                                                 <div className="quote-print-sidebar lg:order-2 space-y-6">
-                                                    <div className="quote-print-card bg-white rounded-2xl border border-slate-200 border-t-4 border-t-primary shadow-sm overflow-hidden">
+                                                    <div data-pdf-keep-together="true" className="quote-print-card bg-white rounded-2xl border border-slate-200 border-t-4 border-t-primary shadow-sm overflow-hidden">
                                                         <div className="px-6 py-5 border-b border-slate-200">
                                                             <h4 className="text-xl font-black text-slate-900">Order summary</h4>
                                                         </div>
