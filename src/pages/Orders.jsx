@@ -111,14 +111,13 @@ const QuoteLinePriceEditor = ({ line, orderId, adjustments, onChange, accent = '
     const original = Number(line.original) || 0
     const adjusted = Number(line.adjusted) || 0
     const discount = Math.max(0, original - adjusted)
-    const discountPercent = original > 0 ? (discount / original) * 100 : 0
     const rawValue = adjustments[String(orderId)]?.[line.key]
 
     return (
         <div className="flex items-center justify-end gap-3 sm:min-w-[180px]">
             <div data-html2canvas-ignore="true" className="quote-admin-only w-full sm:w-40">
                 <div className="mb-1.5 flex min-h-4 items-center justify-end gap-2">
-                    {discount > 0 && <><span className="text-xs font-bold text-slate-400 line-through">£{original.toFixed(2)}</span><span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[9px] font-black text-emerald-700">{discountPercent.toFixed(2)}% off</span></>}
+                    {discount > 0 && <span className="text-xs font-bold text-slate-400 line-through">£{original.toFixed(2)}</span>}
                 </div>
                 <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-black text-slate-400">£</span>
