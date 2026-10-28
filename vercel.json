@@ -15,5 +15,16 @@
   ],
   "rewrites": [
     { "source": "/(.*)", "destination": "/index.html" }
+  ],
+  "functions": {
+    "api/clarity/sync.js": {
+      "maxDuration": 30
+    }
+  },
+  "crons": [
+    {
+      "path": "/api/clarity/sync",
+      "schedule": "30 0 * * *"
+    }
   ]
 }

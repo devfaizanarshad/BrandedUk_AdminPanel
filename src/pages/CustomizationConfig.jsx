@@ -340,14 +340,26 @@ const CustomizationConfig = () => {
         return snapshotTemplate(template) !== baselineSnapshot
     }, [template, baselineSnapshot])
 
+    const productTypesWithTote = useMemo(() => {
+        const hasTote = productTypes.some(type => {
+            const name = String(type.name || '').toLowerCase()
+            const slug = String(type.slug || '').toLowerCase()
+            return name === 'tote' || slug === 'tote' || slug === 'tote-bags'
+        })
+        if (hasTote) return productTypes
+        const next = [...productTypes, { id: 'tote-shortcut', name: 'Tote', slug: 'bags', pinnedSubtype: 'tote' }]
+        next.sort((a, b) => a.name.localeCompare(b.name))
+        return next
+    }, [productTypes])
+
     const filteredProductTypes = useMemo(() => {
         const query = typeSearch.trim().toLowerCase()
-        if (!query) return productTypes
-        return productTypes.filter(type =>
+        if (!query) return productTypesWithTote
+        return productTypesWithTote.filter(type =>
             String(type.name || '').toLowerCase().includes(query) ||
             String(type.slug || '').toLowerCase().includes(query)
         )
-    }, [productTypes, typeSearch])
+    }, [productTypesWithTote, typeSearch])
 
     useEffect(() => {
         const handleKeyDown = (event) => {
@@ -892,16 +904,19 @@ const CustomizationConfig = () => {
                     </div>
                     <div className="space-y-0.5 max-h-[70vh] overflow-y-auto pr-2 custom-scrollbar">
                         {filteredProductTypes.map(type => {
-                            const isSelected = selectedTypeSlug === type.slug
+                            const isSelected = type.pinnedSubtype
+                                ? selectedTypeSlug === type.slug && selectedSubtypeKey === type.pinnedSubtype
+                                : selectedTypeSlug === type.slug && !(type.slug === 'bags' && selectedSubtypeKey === 'tote')
 
                             return (
                                 <button
                                     key={type.id}
                                     onClick={async () => {
-                                        if (type.slug === selectedTypeSlug) return
+                                        const nextSubtype = type.pinnedSubtype || ''
+                                        if (type.slug === selectedTypeSlug && nextSubtype === selectedSubtypeKey) return
                                         const proceed = await requestDiscardOrSave()
                                         if (proceed) {
-                                            setSelectedSubtypeKey('')
+                                            setSelectedSubtypeKey(nextSubtype)
                                             setSelectedTypeSlug(type.slug)
                                         }
                                     }}
@@ -930,7 +945,7 @@ const CustomizationConfig = () => {
                             <Card className="p-6 mb-6">
                                 <div className="flex items-start justify-between gap-4">
                                     <div>
-                                        <h2 className="text-xl font-semibold text-gray-900">{selectedType?.name || template.name}</h2>
+                                        <h2 className="text-xl font-semibold text-gray-900">{selectedTypeSlug === 'bags' && selectedSubtypeKey === 'tote' ? 'Tote' : (selectedType?.name || template.name)}</h2>
                                         {selectedSubtypeOptions.length > 0 && (
                                             <label className="block mt-4 mb-3">
                                                 <span className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
@@ -984,7 +999,7 @@ const CustomizationConfig = () => {
                                 </button>
                             </div>
 
-                            <div className="flex flex-col gap-1">
+                            <div className="flex flex-col gap-3">
                                 {(template.positions || []).map((position) => (
                                     <div
                                         key={position.id}
@@ -999,8 +1014,7 @@ const CustomizationConfig = () => {
                                         }}
                                         className={dropTargetId === position.id && draggingPositionId && draggingPositionId !== position.id ? 'rounded-xl ring-2 ring-primary' : ''}
                                     >
-                                    <Card className={`p-6 ${draggingPositionId === position.id ? 'opacity-60' : ''}`}>
-                                        <div className="flex items-start gap-3 mb-5">
+                                    <div className={`flex h-36 items-center gap-4 rounded-lg border border-slate-200 bg-white px-3 ${draggingPositionId === position.id ? 'opacity-60' : ''}`}>
                                             <div
                                                 draggable
                                                 onDragStart={(event) => {
@@ -1010,47 +1024,19 @@ const CustomizationConfig = () => {
                                                     setDraggingPositionId(position.id)
                                                 }}
                                                 onDragEnd={clearPositionDrag}
-                                                className="mt-1 flex h-10 w-8 shrink-0 cursor-grab items-center justify-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700 active:cursor-grabbing"
+                                                className="flex h-10 w-8 shrink-0 cursor-grab items-center justify-center rounded text-slate-400 hover:bg-slate-100 hover:text-slate-700 active:cursor-grabbing"
                                                 title="Drag to move"
                                             >
                                                 <GripVertical className="w-5 h-5" />
                                             </div>
-                                            <div className="flex-1">
-                                                <label className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2 block">Position Name</label>
-                                                <input
-                                                    value={position.label}
-                                                    onChange={(e) => handlePositionChange(position.id, 'label', e.target.value)}
-                                                    className="w-full text-lg font-semibold text-gray-900 bg-transparent border-b-2 border-gray-200 focus:border-primary focus:outline-none pb-1"
-                                                />
-                                                <div className="mt-2 text-xs text-gray-400">
-                                                    Code: {position.code || slugify(position.label)}
-                                                </div>
-                                            </div>
-                                            <div className="flex items-center gap-1">
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleDeletePosition(position.id)}
-                                                    className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-                                                    title="Delete position"
-                                                >
-                                                    <Trash2 className="w-4 h-4" />
-                                                </button>
-                                            </div>
-                                        </div>
-
-                                        <div className="mb-5">
-                                            <label className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2 block">Reference Image</label>
-                                            <label className="block cursor-pointer">
-                                                <div className="aspect-video bg-gray-100 rounded-lg border border-dashed border-gray-300 overflow-hidden flex items-center justify-center transition-colors hover:border-primary hover:bg-slate-50">
-                                                    {position.preview_image_url ? (
-                                                        <img src={position.preview_image_url} alt={position.label} draggable={false} className="w-full h-full object-contain bg-white" />
-                                                    ) : (
-                                                        <div className="text-center text-gray-400">
-                                                            <ImageIcon className="w-8 h-8 mx-auto mb-2" />
-                                                            <div className="text-sm font-medium">Click anywhere to upload</div>
-                                                        </div>
-                                                    )}
-                                                </div>
+                                            <label className="relative h-32 w-32 shrink-0 cursor-pointer overflow-hidden rounded border border-dashed border-slate-300 bg-slate-50" title="Change image">
+                                                {position.preview_image_url ? (
+                                                    <img src={position.preview_image_url} alt="" draggable={false} className="h-full w-full object-contain bg-white" />
+                                                ) : (
+                                                    <span className="flex h-full w-full items-center justify-center text-slate-400">
+                                                        <ImageIcon className="h-8 w-8" />
+                                                    </span>
+                                                )}
                                                 <input
                                                     type="file"
                                                     accept="image/*"
@@ -1062,82 +1048,70 @@ const CustomizationConfig = () => {
                                                     }}
                                                 />
                                             </label>
-                                            <div className="mt-3 flex flex-wrap gap-2">
-                                                <label className="inline-flex items-center px-3 py-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200 cursor-pointer transition-colors">
-                                                    <Upload className="w-4 h-4 mr-2" />
-                                                    {position.preview_image_url ? 'Change image' : 'Upload an image'}
-                                                    <input
-                                                        type="file"
-                                                        accept="image/*"
-                                                        className="hidden"
-                                                        onChange={(e) => {
-                                                            const file = e.target.files?.[0]
-                                                            handleUploadImage(position, file)
-                                                            e.target.value = ''
-                                                        }}
-                                                    />
-                                                </label>
-                                                {position.preview_image_url && (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => handleRemoveImage(position.id)}
-                                                        className="inline-flex items-center px-3 py-2 bg-red-50 text-red-700 rounded hover:bg-red-100"
-                                                    >
-                                                        <X className="w-4 h-4 mr-2" />
-                                                        Remove Image
-                                                    </button>
-                                                )}
-                                            </div>
-                                        </div>
-
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            <div className="p-4 rounded-lg bg-slate-50 border border-slate-200">
-                                                <div className="flex items-center justify-between mb-3">
-                                                    <div className="font-medium text-slate-900">Embroidery</div>
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={Boolean(position.embroidery_enabled)}
-                                                        onChange={(e) => handlePositionChange(position.id, 'embroidery_enabled', e.target.checked)}
-                                                    />
-                                                </div>
-                                                <label className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1 block">Price</label>
-                                                <div className="relative">
-                                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">£</span>
+                                            <input
+                                                value={position.label}
+                                                onChange={(e) => handlePositionChange(position.id, 'label', e.target.value)}
+                                                className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-gray-900 border-b border-transparent focus:border-primary focus:outline-none"
+                                            />
+                                            <label className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                                <input
+                                                    type="checkbox"
+                                                    className="h-4 w-4"
+                                                    checked={Boolean(position.embroidery_enabled)}
+                                                    onChange={(e) => handlePositionChange(position.id, 'embroidery_enabled', e.target.checked)}
+                                                />
+                                                Emb
+                                                <span className="relative">
+                                                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-slate-400">£</span>
                                                     <input
                                                         type="number"
                                                         step="0.01"
                                                         value={methodPriceValue(position.embroidery_price)}
                                                         onChange={(e) => handlePositionChange(position.id, 'embroidery_price', e.target.value === '' ? null : e.target.value)}
                                                         disabled={!position.embroidery_enabled}
-                                                        className="w-full pl-8 pr-3 py-2 border-2 border-gray-200 rounded-lg focus:border-primary focus:outline-none bg-white"
+                                                        className="h-8 w-20 rounded border border-slate-200 bg-white py-0 pl-5 pr-1 text-sm disabled:bg-slate-50"
                                                     />
-                                                </div>
-                                            </div>
-
-                                            <div className="p-4 rounded-lg bg-slate-50 border border-slate-200">
-                                                <div className="flex items-center justify-between mb-3">
-                                                    <div className="font-medium text-slate-900">Print</div>
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={Boolean(position.print_enabled)}
-                                                        onChange={(e) => handlePositionChange(position.id, 'print_enabled', e.target.checked)}
-                                                    />
-                                                </div>
-                                                <label className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1 block">Price</label>
-                                                <div className="relative">
-                                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">£</span>
+                                                </span>
+                                            </label>
+                                            <label className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                                <input
+                                                    type="checkbox"
+                                                    className="h-4 w-4"
+                                                    checked={Boolean(position.print_enabled)}
+                                                    onChange={(e) => handlePositionChange(position.id, 'print_enabled', e.target.checked)}
+                                                />
+                                                Print
+                                                <span className="relative">
+                                                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-slate-400">£</span>
                                                     <input
                                                         type="number"
                                                         step="0.01"
                                                         value={methodPriceValue(position.print_price)}
                                                         onChange={(e) => handlePositionChange(position.id, 'print_price', e.target.value === '' ? null : e.target.value)}
                                                         disabled={!position.print_enabled}
-                                                        className="w-full pl-8 pr-3 py-2 border-2 border-gray-200 rounded-lg focus:border-primary focus:outline-none bg-white"
+                                                        className="h-8 w-20 rounded border border-slate-200 bg-white py-0 pl-5 pr-1 text-sm disabled:bg-slate-50"
                                                     />
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </Card>
+                                                </span>
+                                            </label>
+                                            {position.preview_image_url && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleRemoveImage(position.id)}
+                                                    className="p-1 text-slate-400 hover:text-red-600"
+                                                    title="Remove image"
+                                                >
+                                                    <X className="w-4 h-4" />
+                                                </button>
+                                            )}
+                                            <button
+                                                type="button"
+                                                onClick={() => handleDeletePosition(position.id)}
+                                                className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
+                                                title="Delete position"
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                            </button>
+                                    </div>
                                     </div>
                                 ))}
                             </div>

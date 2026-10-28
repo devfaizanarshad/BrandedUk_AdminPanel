@@ -16,6 +16,7 @@ import Calendar from './pages/Calendar'
 import System from './pages/System'
 import MarkupOverrides from './pages/MarkupOverrides'
 import PriceOverrides from './pages/PriceOverrides'
+import Clarity from './pages/Clarity'
 import HumanitieesProducts from './pages/HumanitieesProducts'
 import HumanitieesCustomers from './pages/HumanitieesCustomers'
 
@@ -97,8 +98,10 @@ function App() {
           <Route path="/system" element={<System />} />
           <Route path="/markup-overrides" element={<MarkupOverrides />} />
           <Route path="/price-overrides" element={<PriceOverrides />} />
+          <Route path="/clarity" element={<Clarity />} />
           <Route path="/humanitiees-products" element={<HumanitieesProducts />} />
           <Route path="/humanitiees-customers" element={<HumanitieesCustomers />} />
+
         </Routes>
       </Layout>
     </Router>
