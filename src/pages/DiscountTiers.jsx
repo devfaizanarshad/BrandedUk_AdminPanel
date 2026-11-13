@@ -3,6 +3,7 @@ import Card from '../components/Card'
 import { Tags, Edit3, Check, X, AlertCircle, TrendingDown, RefreshCw } from 'lucide-react'
 
 import { API_BASE } from '../config'
+import { adminFetch } from '../adminAuth'
 
 const DiscountTiers = () => {
     const [tiers, setTiers] = useState([])
@@ -20,12 +21,12 @@ const DiscountTiers = () => {
         try {
             setLoading(true)
             setError(null)
-            const response = await fetch(`${API_BASE}/api/admin/price-breaks`)
+            const response = await adminFetch(`${API_BASE}/api/admin/price-breaks`)
             if (!response.ok) throw new Error('Failed to fetch global tiers')
             const data = await response.json()
             const tiersList = data.tiers || data.items || []
             setTiers(tiersList.map((t, idx) => ({
-                id: idx,
+                id: t.id ?? idx,
                 min: t.min_qty,
                 max: t.max_qty,
                 discount: t.discount_percent,
@@ -58,7 +59,7 @@ const DiscountTiers = () => {
 
         try {
             setSaving(true)
-            const response = await fetch(`${API_BASE}/api/admin/price-breaks`, {
+            const response = await adminFetch(`${API_BASE}/api/admin/price-breaks`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
